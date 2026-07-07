@@ -1,0 +1,5 @@
+﻿category,n,events,prevalence
+both_positive,366,121,0.33060109289617484
+clinical_positive_aec_negative,103,4,0.038834951456310676
+clinical_negative_aec_positive,6,1,0.16666666666666666
+both_negative,451,15,0.03325942350332594

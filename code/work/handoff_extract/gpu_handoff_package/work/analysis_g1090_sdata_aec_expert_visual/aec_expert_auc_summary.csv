@@ -1,0 +1,4 @@
+dataset,auc
+g1090_oof,0.5783542659858513
+sdata_external,0.5661652437096264
+sdata_external_final_refit,0.5661652437096264

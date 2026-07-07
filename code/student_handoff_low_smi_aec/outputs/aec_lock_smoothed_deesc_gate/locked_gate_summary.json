@@ -1,0 +1,86 @@
+{
+  "preprocessing": {
+    "source_sheet": "aec_128",
+    "smoothing": "gaussian_filter1d sigma=1.0, axis=1, mode=nearest",
+    "normalization": "patient-wise mean normalization after smoothing",
+    "raw_level_features_used": false
+  },
+  "selection": {
+    "derivation_dataset": "g1090 internal only",
+    "external_dataset": "sdata used only after lock",
+    "operating_points": [
+      [
+        "S80",
+        0.8
+      ],
+      [
+        "S82.5",
+        0.825
+      ],
+      [
+        "S85",
+        0.85
+      ],
+      [
+        "S87.5",
+        0.875
+      ],
+      [
+        "S90",
+        0.9
+      ]
+    ],
+    "single_feature_pool_size": 18,
+    "max_combo_m": 4,
+    "constraints": "min sensitivity-loss p >= 0.05, min specificity gain > 0, max de-escalated event Fisher p < 0.05, min de-escalated n >= 25, max sensitivity loss <= 8 percentage points"
+  },
+  "locked_rule": {
+    "rule": "2-of-4",
+    "m": 4,
+    "k": 2,
+    "subset_indices": "0|1|3|4",
+    "features": "smooth_norm__norm_slope_082_085_sd + smooth_visual__visual_norm_abs_slope_094_099_max + smooth_norm__norm_curv_103_110_mean + smooth_norm__norm_curv_097_100_sd",
+    "mean_company_eta2": 0.1317374477859949,
+    "survives_internal_constraints": true,
+    "lock_selection_score": 0.40076789853444594,
+    "internal_min_p_loss": 0.0625,
+    "internal_max_sens_loss": 0.03875968992248058,
+    "internal_min_spec_gain": 0.08636836628511968,
+    "internal_mean_spec_gain": 0.09094693028095732,
+    "internal_min_ba_delta": 0.027446377723463034,
+    "internal_mean_ba_delta": 0.02841920157458717,
+    "internal_max_fisher_p": 7.053483178851135e-06,
+    "internal_min_deesc_n": 87,
+    "internal_mean_deesc_event_rate": 0.04780345265481003
+  },
+  "locked_features": [
+    {
+      "feature": "smooth_norm__norm_slope_082_085_sd",
+      "width": 0.7,
+      "lambda": 0.7,
+      "company_eta2": 0.10873871060692694,
+      "screen_score": 0.27472867038726206
+    },
+    {
+      "feature": "smooth_visual__visual_norm_abs_slope_094_099_max",
+      "width": 0.5,
+      "lambda": 0.7,
+      "company_eta2": 0.12901557244025474,
+      "screen_score": 0.2485327253184886
+    },
+    {
+      "feature": "smooth_norm__norm_curv_103_110_mean",
+      "width": 0.7,
+      "lambda": 0.55,
+      "company_eta2": 0.04938503855357004,
+      "screen_score": 0.21768820679184012
+    },
+    {
+      "feature": "smooth_norm__norm_curv_097_100_sd",
+      "width": 0.7,
+      "lambda": 0.55,
+      "company_eta2": 0.23981046954322788,
+      "screen_score": 0.2127120231272317
+    }
+  ]
+}

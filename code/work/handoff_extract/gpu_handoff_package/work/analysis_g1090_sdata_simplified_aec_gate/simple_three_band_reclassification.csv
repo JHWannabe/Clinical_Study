@@ -1,0 +1,5 @@
+﻿group,n,events,non_events,prevalence,low_threshold,high_threshold
+clinical_negative,457,16,441,0.0350109409190372,,
+clinical_positive_low_risk_by_aec,53,10,43,0.18867924528301888,-1.655508808501597,
+clinical_positive_intermediate_by_aec,401,109,292,0.2718204488778055,-1.655508808501597,2.928274069942705
+clinical_positive_high_priority_by_aec,15,6,9,0.4,,2.928274069942705
