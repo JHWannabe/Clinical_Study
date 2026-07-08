@@ -1,8 +1,0 @@
-{
-  "timestamp": "2026-07-08 02:24:43",
-  "stage": "training",
-  "config": "surrogate_mimic_balanced",
-  "fold_done": 10,
-  "fold_total": 10,
-  "device": "cuda"
-}

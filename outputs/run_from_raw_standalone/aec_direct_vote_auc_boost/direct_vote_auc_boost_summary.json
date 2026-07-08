@@ -1,0 +1,7 @@
+{
+  "source_probabilities": "C:\\Users\\jhjun\\Desktop\\Clinical_Study\\outputs\\run_from_raw_standalone\\aec_region_cnn_pattern_gate\\direct_vote_probabilities.npz",
+  "input": "direct-vote CNN branch probabilities plus optional clinical score context",
+  "validation": "internal g1090 cross-fitted OOF; external sdata held-out",
+  "target": "low SMI",
+  "note": "Exploratory AUC-max calibration. External AUC is the only relevant target for portability."
+}

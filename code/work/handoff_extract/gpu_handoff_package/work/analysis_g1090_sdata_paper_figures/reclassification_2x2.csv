@@ -1,5 +1,0 @@
-group,n,events,non_events,prevalence
-Clinical+ / AEC+,366,121,245,0.33060109289617484
-Clinical+ / AEC-,103,4,99,0.038834951456310676
-Clinical- / AEC+,6,1,5,0.16666666666666666
-Clinical- / AEC-,451,15,436,0.03325942350332594
