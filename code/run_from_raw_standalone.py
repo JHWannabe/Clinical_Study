@@ -46,15 +46,29 @@ The external cohort is used only after the internal procedure is fixed.
 import itertools
 import json
 import math
+import os
 import subprocess
 import sys
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
+# Pin BLAS/OpenMP thread pools to 1 before numpy/sklearn import so
+# multi-threaded reductions (used internally by HistGradientBoostingClassifier
+# and BLAS-backed linear algebra) always sum in the same order across runs.
+# Combined with n_jobs=1 on RandomForest/ExtraTrees below, this makes
+# BOOST_main's model scores exactly reproducible run-to-run on a fixed seed.
+for _env_var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_env_var, "1")
+# Required by torch.use_deterministic_algorithms() for some CUDA GEMM/conv
+# kernels; must be set before any CUDA context is created.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from typing import cast
+
 import statsmodels.api as sm
 import torch
 import torch.nn as nn
@@ -180,10 +194,10 @@ def clinical_estimator() -> LogisticRegression:
 
 def score_model(model, x: np.ndarray) -> np.ndarray:
     if hasattr(model, "decision_function"):
-        return model.decision_function(x)
+        return np.asarray(model.decision_function(x), dtype=float)
     if hasattr(model, "predict_proba"):
-        return model.predict_proba(x)[:, 1]
-    return model.predict(x)
+        return np.asarray(model.predict_proba(x)[:, 1], dtype=float)
+    return np.asarray(model.predict(x), dtype=float)
 
 
 def oof_and_external(model_factory, xtr: np.ndarray, ytr: np.ndarray, xte: np.ndarray, folds: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
@@ -326,7 +340,7 @@ def build_feature_bank(x_norm: np.ndarray) -> pd.DataFrame:
     d1 = np.diff(x, axis=1)
     dlog = np.diff(logx, axis=1)
     d2 = np.diff(d1, axis=1)
-    coeff = dct(logx, type=2, norm="ortho", axis=1)
+    coeff = np.asarray(dct(logx, type=2, norm="ortho", axis=1))
     fft_mag = np.abs(np.fft.rfft(logx - logx.mean(axis=1, keepdims=True), axis=1))
 
     rows: dict[str, np.ndarray] = {}
@@ -584,7 +598,7 @@ def prescreen_feature_indices(
     for op, _ in OPS:
         cp = clinical_z >= thresholds[op]
         yy = y[cp].astype(float)
-        if yy.size < 20 or np.unique(yy).size < 2:
+        if yy.size < 20 or cast(np.ndarray, np.unique(yy)).size < 2:
             continue
         yc = yy - yy.mean()
         xx = x[cp]
@@ -677,7 +691,7 @@ def deesc_metric_row(dataset: str, rule: str, features: str, op: str, y: np.ndar
     kept_ne = int(np.sum(y[final] == 0))
     de_e = int(np.sum(y[deesc] == 1))
     de_ne = int(np.sum(y[deesc] == 0))
-    fisher_p = float(stats.fisher_exact([[kept_e, kept_ne], [de_e, de_ne]])[1]) if (kept_e + kept_ne and de_e + de_ne) else np.nan
+    fisher_p = float(cast(float, stats.fisher_exact([[kept_e, kept_ne], [de_e, de_ne]])[1])) if (kept_e + kept_ne and de_e + de_ne) else np.nan
     return {
         "dataset": dataset,
         "rule": rule,
@@ -860,7 +874,7 @@ def precompute_votes(
             cpos = c_by[dataset] >= th
             cpos_by[(dataset, op)] = cpos
             mat = np.zeros((len(selected), len(y_by[dataset])), dtype=np.int8)
-            for i, r in selected.reset_index(drop=True).iterrows():
+            for i, (_, r) in enumerate(selected.reset_index(drop=True).iterrows()):
                 z = x_by[dataset][:, int(r["feature_index"])]
                 mat[i] = make_single_deesc(c_by[dataset], z, th, float(r["width"]), float(r["lambda"])).astype(np.int8)
             votes[(dataset, op)] = mat
@@ -954,8 +968,8 @@ def adjusted_p_for_row(y: np.ndarray, clinical_z: np.ndarray, cpos: np.ndarray, 
         base = dummies.copy()
         full = dummies.copy()
         if include_clinical:
-            base.insert(0, "clinical_z", clinical_z[cpos])
-            full.insert(0, "clinical_z", clinical_z[cpos])
+            base.insert(0, "clinical_z", pd.Series(clinical_z[cpos]))
+            full.insert(0, "clinical_z", pd.Series(clinical_z[cpos]))
         full["deesc"] = deesc[cpos].astype(float)
         try:
             fit0 = sm.Logit(yy, sm.add_constant(base, has_constant="add")).fit(disp=False, maxiter=1000)
@@ -1292,6 +1306,9 @@ def soft_atleast2_prob(logits: torch.Tensor) -> torch.Tensor:
 
 
 class DirectVoteCnn(torch.nn.Module):
+    thresholds: torch.Tensor
+    width: torch.Tensor
+
     def __init__(self, thresholds: np.ndarray, dropout: float) -> None:
         super().__init__()
         self.regions = list(REGIONS.items())
@@ -1378,6 +1395,7 @@ def DVOTE_train_one_fold(
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.set_num_threads(max(1, min(4, torch.get_num_threads())))
+    torch.use_deterministic_algorithms(True, warn_only=True)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.benchmark = False
@@ -1491,19 +1509,15 @@ def popcount(x: int) -> int:
     return int(bin(x).count("1"))
 
 
-def codes_from_prob(prob: np.ndarray, thresholds: np.ndarray) -> np.ndarray:
-    votes = prob >= thresholds[None, None, :]
-    code = np.zeros(votes.shape[:2], dtype=np.int16)
-    for j in range(votes.shape[-1]):
-        code += votes[..., j].astype(np.int16) * (1 << j)
-    return code
-
-
 def votes_to_codes(votes: np.ndarray) -> np.ndarray:
     code = np.zeros(votes.shape[:2], dtype=np.int16)
     for j in range(votes.shape[-1]):
         code += votes[..., j].astype(np.int16) * (1 << j)
     return code
+
+
+def codes_from_prob(prob: np.ndarray, thresholds: np.ndarray) -> np.ndarray:
+    return votes_to_codes(prob >= thresholds[None, None, :])
 
 
 def evaluate_pattern_gate(
@@ -1645,8 +1659,8 @@ def threshold_vectors() -> list[np.ndarray]:
     rows: list[tuple[float, float, float, float]] = []
     for p in np.round(np.arange(0.35, 0.86, 0.05), 2):
         rows.append((float(p), float(p), float(p), float(p)))
-    for vals in itertools.product([0.55, 0.65, 0.75], repeat=4):
-        rows.append(tuple(float(v) for v in vals))
+    for v0, v1, v2, v3 in itertools.product([0.55, 0.65, 0.75], repeat=4):
+        rows.append((float(v0), float(v1), float(v2), float(v3)))
     unique = sorted(set(rows))
     return [np.array(v, dtype=float) for v in unique]
 
@@ -1965,14 +1979,6 @@ def paired_delta_bootstrap(
     return obs, float(min(1.0, p)), float(lo), float(hi)
 
 
-def score_estimator(model, x: np.ndarray) -> np.ndarray:
-    if hasattr(model, "decision_function"):
-        return np.asarray(model.decision_function(x), dtype=float)
-    if hasattr(model, "predict_proba"):
-        return np.asarray(model.predict_proba(x)[:, 1], dtype=float)
-    return np.asarray(model.predict(x), dtype=float)
-
-
 def model_factory(key: str, seed: int):
     if key == "logit_l2":
         return make_pipeline(
@@ -2021,7 +2027,7 @@ def model_factory(key: str, seed: int):
             min_samples_leaf=18,
             class_weight="balanced_subsample",
             random_state=seed,
-            n_jobs=-1,
+            n_jobs=1,
         )
     if key == "extratrees":
         return ExtraTreesClassifier(
@@ -2030,12 +2036,12 @@ def model_factory(key: str, seed: int):
             min_samples_leaf=16,
             class_weight="balanced",
             random_state=seed,
-            n_jobs=-1,
+            n_jobs=1,
         )
     if key == "linear_svm":
         return make_pipeline(
             StandardScaler(),
-            LinearSVC(C=0.05, class_weight="balanced", dual="auto", max_iter=10000, random_state=seed),
+            LinearSVC(C=0.05, class_weight="balanced", dual=cast(bool, "auto"), max_iter=10000, random_state=seed),
         )
     raise ValueError(key)
 
@@ -2144,11 +2150,11 @@ def crossfit_candidate(candidate: Candidate, xg: np.ndarray, yg: np.ndarray, xs:
     for fold, (tr, va) in enumerate(skf.split(np.zeros(len(yg)), yg)):
         model = model_factory(candidate.model_key, BOOST_SEED + fold)
         model.fit(xg[tr], yg[tr])
-        oof[va] = score_estimator(model, xg[va])
-        ext_scores.append(score_estimator(model, xs))
+        oof[va] = score_model(model, xg[va])
+        ext_scores.append(score_model(model, xs))
     final = model_factory(candidate.model_key, BOOST_SEED + 999)
     final.fit(xg, yg)
-    ext_final = score_estimator(final, xs)
+    ext_final = score_model(final, xs)
     # Blend final and fold ensemble to reduce variance.
     ext = 0.5 * ext_final + 0.5 * np.mean(ext_scores, axis=0)
     return oof, ext
@@ -2530,9 +2536,12 @@ def fisher_high_vs_low(y: np.ndarray, high: np.ndarray, low: np.ndarray) -> dict
     low_rate = safe_rate(low_events, low_n)
 
     if high_n > 0 and low_n > 0:
-        odds_ratio, p_value = stats.fisher_exact(
-            [[high_events, high_nonevents], [low_events, low_nonevents]],
-            alternative="greater",
+        odds_ratio, p_value = cast(
+            "tuple[float, float]",
+            stats.fisher_exact(
+                [[high_events, high_nonevents], [low_events, low_nonevents]],
+                alternative="greater",
+            ),
         )
     else:
         odds_ratio, p_value = np.nan, np.nan
@@ -2720,7 +2729,7 @@ def cell_characteristics(df: pd.DataFrame, q: float) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for cohort, sub in flagged.groupby("cohort"):
         for cell in ["C+A+", "C+A-", "C-A+", "C-A-"]:
-            rows.append(group_characteristics(sub, sub["cell"].eq(cell), cell, cohort))
+            rows.append(group_characteristics(sub, sub["cell"].eq(cell), cell, str(cohort)))
     return pd.DataFrame(rows)
 
 
@@ -2759,7 +2768,7 @@ def low_smi_subtype_tables(df: pd.DataFrame, q: float) -> tuple[pd.DataFrame, pd
             "other lowSMI": ~(sub["clinical_pos"] & sub["aec_pos_global"]),
         }
         for label, mask in groups.items():
-            summary_rows.append(group_characteristics(sub, mask, label, cohort))
+            summary_rows.append(group_characteristics(sub, mask, label, str(cohort)))
 
         mask = sub["aec_pos_global"].to_numpy(bool)
         for col in features:
@@ -2769,10 +2778,13 @@ def low_smi_subtype_tables(df: pd.DataFrame, q: float) -> tuple[pd.DataFrame, pd
                 p_value = np.nan
             elif col == "male":
                 p_value = float(
-                    stats.fisher_exact(
-                        [[int(np.sum(a == 1)), int(np.sum(a == 0))], [int(np.sum(b == 1)), int(np.sum(b == 0))]],
-                        alternative="two-sided",
-                    ).pvalue
+                    cast(
+                        float,
+                        stats.fisher_exact(
+                            [[int(np.sum(a == 1)), int(np.sum(a == 0))], [int(np.sum(b == 1)), int(np.sum(b == 0))]],
+                            alternative="two-sided",
+                        )[1],
+                    )
                 )
             else:
                 p_value = float(stats.mannwhitneyu(a, b, alternative="two-sided").pvalue)

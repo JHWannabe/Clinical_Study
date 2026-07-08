@@ -35,12 +35,13 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import cast, overload, Literal
 
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 import numpy as np
 import pandas as pd
 from scipy import ndimage, stats
@@ -48,8 +49,9 @@ from sklearn.linear_model import LogisticRegression
 
 # Section 8 (internal/external 1x3 mean-curve figures, merged from
 # main_plot_s90_core_1x3_mean_curves.py) reuses these two sibling modules'
-# own clinical-scoring/feature pipeline (now merged below as the LSG_/NRSCG_
-# tagged sections). This is intentionally a *separate* computation from this
+# own clinical-scoring/feature pipeline (now merged below as the LSG_-tagged
+# section, reusing this file's own feature/standardization helpers with an
+# isolated RNG). This is intentionally a *separate* computation from this
 # file's own make_context()/fit_clinical_scores(): the two pipelines use
 # different underlying models, so their clinical_z scores are not
 # interchangeable even though they gate on the same locked branches.
@@ -272,18 +274,19 @@ def clinical_design_matrix(internal_meta: pd.DataFrame, external_meta: pd.DataFr
     return (xg - mean) / sd, (xs - mean) / sd, names
 
 
-def stratified_folds(y: np.ndarray, k: int = 5) -> list[np.ndarray]:
+def stratified_folds(y: np.ndarray, k: int = 5, rng: np.random.Generator | None = None) -> list[np.ndarray]:
+    rng = RNG if rng is None else rng
     folds: list[list[int]] = [[] for _ in range(k)]
     for cls in [0, 1]:
         idx = np.flatnonzero(y == cls)
-        RNG.shuffle(idx)
+        rng.shuffle(idx)
         for i, row_idx in enumerate(idx):
             folds[i % k].append(int(row_idx))
     return [np.array(sorted(fold), dtype=int) for fold in folds]
 
 
-def fit_clinical_scores(xg: np.ndarray, yg: np.ndarray, xs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    folds = stratified_folds(yg, 5)
+def fit_clinical_scores(xg: np.ndarray, yg: np.ndarray, xs: np.ndarray, rng: np.random.Generator | None = None) -> tuple[np.ndarray, np.ndarray]:
+    folds = stratified_folds(yg, 5, rng=rng)
     oof = np.zeros(len(yg), dtype=float)
     all_idx = np.arange(len(yg))
     for val_idx in folds:
@@ -297,12 +300,25 @@ def fit_clinical_scores(xg: np.ndarray, yg: np.ndarray, xs: np.ndarray) -> tuple
     return oof, final.decision_function(xs)
 
 
-def z_standardize_by_internal(internal_score: np.ndarray, external_score: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+@overload
+def z_standardize_by_internal(
+    internal_score: np.ndarray, external_score: np.ndarray, return_stats: Literal[False] = False
+) -> tuple[np.ndarray, np.ndarray]: ...
+@overload
+def z_standardize_by_internal(
+    internal_score: np.ndarray, external_score: np.ndarray, return_stats: Literal[True]
+) -> tuple[np.ndarray, np.ndarray, float, float]: ...
+def z_standardize_by_internal(
+    internal_score: np.ndarray, external_score: np.ndarray, return_stats: bool = False
+) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, float, float]:
     mean = float(np.mean(internal_score))
     sd = float(np.std(internal_score))
     if not np.isfinite(sd) or sd == 0:
         sd = 1.0
-    return (internal_score - mean) / sd, (external_score - mean) / sd
+    zg, zs = (internal_score - mean) / sd, (external_score - mean) / sd
+    if return_stats:
+        return zg, zs, mean, sd
+    return zg, zs
 
 
 def binary_metrics(y: np.ndarray, pred_positive: np.ndarray) -> dict:
@@ -342,7 +358,14 @@ def make_context() -> dict:
     yg = internal["low_smi"].astype(int)
     ys = external["low_smi"].astype(int)
     xg, xs, clinical_names = clinical_design_matrix(internal["meta"], external["meta"])
-    cg_raw, cs_raw = fit_clinical_scores(xg, yg, xs)
+    # make_context() is called more than once per process run (once for the
+    # main pipeline, once again inside MDCARD_main() to render the summary
+    # cards). A shared, mutable module-level RNG would have already advanced
+    # past its seed state by the second call, giving a different fold split
+    # (and therefore different clinical scores/gate results) than a single
+    # fresh run. Re-seed here so every make_context() call is independent and
+    # reproducible regardless of how many times it has already been invoked.
+    cg_raw, cs_raw = fit_clinical_scores(xg, yg, xs, rng=np.random.default_rng(SEED))
     cg, cs = z_standardize_by_internal(cg_raw, cs_raw)
     thresholds = {op: threshold_for_min_sensitivity(yg, cg, target) for op, target in TARGET_OPS}
     cpos_g = {op: cg >= th for op, th in thresholds.items()}
@@ -543,7 +566,7 @@ def conditional_low_smi_table(y: np.ndarray, clinical_positive: np.ndarray, aec_
         [rows[0]["low_smi_events"], rows[0]["n"] - rows[0]["low_smi_events"]],
         [rows[1]["low_smi_events"], rows[1]["n"] - rows[1]["low_smi_events"]],
     ]
-    p = float(stats.fisher_exact(fisher_table)[1])
+    p = float(cast(float, stats.fisher_exact(fisher_table)[1]))
     out = pd.DataFrame(rows)
     out["fisher_p"] = p
     return out, p
@@ -1136,9 +1159,9 @@ def compute_clinical_and_features(g: dict, s: dict) -> tuple[np.ndarray, np.ndar
     호출)과 다른 결과가 나온다."""
     _, _, c_g, c_s, thresholds = LSG_clinical_scores(g, s)
     threshold = float(thresholds["S90"])
-    fg = NRSCG_region_descriptor_matrix(g["norm"])
-    fs = NRSCG_region_descriptor_matrix(s["norm"])
-    xg, xs, names = NRSCG_z_train_apply(fg, fs)
+    fg = locked_region_descriptor_matrix(g["norm"])
+    fs = locked_region_descriptor_matrix(s["norm"])
+    xg, xs, names = standardize_features_by_internal(fg, fs)
     name_to_idx = {name: idx for idx, name in enumerate(names)}
     return c_g, c_s, xg, xs, threshold, name_to_idx
 
@@ -1577,148 +1600,30 @@ def main() -> None:
 
 # ---------------------------------------------------------------------------
 # Legacy helpers retained only because run_plot_1x3_mean_curves() (section 8)
-# reuses aec_lock_smoothed_deesc_gate's clinical_scores() and
-# aec_new_region_surrogate_combo_gate's region_descriptor_matrix()/
-# z_train_apply() as a separate clinical-scoring backend (see section 8
+# reuses this file's own clinical-scoring and region-descriptor pipeline as a
+# separate, isolated-RNG backend (see section 8 docstring / compute_clinical_and_features()
 # docstring), and MDCARD_main() (below) reuses this file's own
 # make_context()/compute_locked_gate()/compute_secondary_cnn_mimic() to
 # render the outputs/MD summary cards. Everything else from the original
 # merged legacy scripts (region/branch/CNN search stages, their own main()s
-# and CLI modes) has been removed as unused.
+# and CLI modes) has been removed as unused. CV_RNG is a separate RNG instance
+# (same seed) so section 8's fold split matches what the original standalone
+# script produced with a pristine RNG, independent of how far the main
+# make_context()/fit_clinical_scores() call above has already advanced RNG.
 # ---------------------------------------------------------------------------
 
 CV_SEED = 20260629
 CV_RNG = np.random.default_rng(CV_SEED)
 
-NRSCG_REGIONS = {
-    "R1_045_056": (45, 56),
-    "R2_057_080": (57, 80),
-    "R3_097_128": (97, 128),
-    "R4_117_128": (117, 128),
-}
-
-
-def CV_aec_columns(df: pd.DataFrame) -> list[str]:
-    return sorted([c for c in df.columns if str(c).startswith("aec_")], key=lambda c: int(str(c).split("_")[1]))
-
-
-def CV_matrix_from_sheet(df: pd.DataFrame) -> np.ndarray:
-    x = df[CV_aec_columns(df)].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
-    global_med = float(np.nanmedian(x[np.isfinite(x)])) if np.any(np.isfinite(x)) else 0.0
-    col_med = np.nanmedian(x, axis=0)
-    col_med[~np.isfinite(col_med)] = global_med
-    bad = ~np.isfinite(x)
-    if bad.any():
-        x[bad] = np.take(col_med, np.where(bad)[1])
-    x[~np.isfinite(x)] = global_med
-    return x
-
-
-def CV_clinical_matrix(train_meta: pd.DataFrame, test_meta: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    names = ["PatientAge", "Height", "Weight", "sex_M"]
-
-    def raw(meta: pd.DataFrame) -> np.ndarray:
-        return np.column_stack(
-            [
-                pd.to_numeric(meta["PatientAge"], errors="coerce").to_numpy(dtype=float),
-                pd.to_numeric(meta["Height"], errors="coerce").to_numpy(dtype=float),
-                pd.to_numeric(meta["Weight"], errors="coerce").to_numpy(dtype=float),
-                (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float),
-            ]
-        )
-
-    tr = raw(train_meta)
-    te = raw(test_meta)
-    med = np.nanmedian(tr, axis=0)
-    tr = np.where(np.isfinite(tr), tr, med)
-    te = np.where(np.isfinite(te), te, med)
-    mu = tr.mean(axis=0)
-    sd = tr.std(axis=0)
-    sd[sd == 0] = 1.0
-    return (tr - mu) / sd, (te - mu) / sd, names
-
-
-def CV_make_folds(y: np.ndarray, k: int = 5) -> list[np.ndarray]:
-    folds: list[list[int]] = [[] for _ in range(k)]
-    for cls in [0, 1]:
-        idx = np.flatnonzero(y == cls)
-        CV_RNG.shuffle(idx)
-        for i, ix in enumerate(idx):
-            folds[i % k].append(int(ix))
-    return [np.array(sorted(f), dtype=int) for f in folds]
-
-
-def CV_clinical_estimator() -> LogisticRegression:
-    return LogisticRegression(C=1e6, solver="lbfgs", max_iter=5000)
-
-
-def CV_score_model(model, x: np.ndarray) -> np.ndarray:
-    if hasattr(model, "decision_function"):
-        return model.decision_function(x)
-    if hasattr(model, "predict_proba"):
-        return model.predict_proba(x)[:, 1]
-    return model.predict(x)
-
-
-def CV_oof_and_external(model_factory, xtr: np.ndarray, ytr: np.ndarray, xte: np.ndarray, folds: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    oof = np.zeros(len(ytr), dtype=float)
-    all_idx = np.arange(len(ytr))
-    for fold_id, val_idx in enumerate(folds):
-        tr_idx = np.setdiff1d(all_idx, val_idx)
-        model = model_factory(CV_SEED + fold_id)
-        model.fit(xtr[tr_idx], ytr[tr_idx])
-        oof[val_idx] = CV_score_model(model, xtr[val_idx])
-    final = model_factory(CV_SEED + 99)
-    final.fit(xtr, ytr)
-    return oof, CV_score_model(final, xte)
-
-
-def CV_zfit_apply(train_score: np.ndarray, test_score: np.ndarray) -> tuple[np.ndarray, np.ndarray, float, float]:
-    mu = float(np.mean(train_score))
-    sd = float(np.std(train_score))
-    if not np.isfinite(sd) or sd == 0:
-        sd = 1.0
-    return (train_score - mu) / sd, (test_score - mu) / sd, mu, sd
-
-
-def CV_binary_metrics(y: np.ndarray, score: np.ndarray, th: float) -> dict:
-    pred = score >= th
-    tp = int(np.sum(pred & (y == 1)))
-    fp = int(np.sum(pred & (y == 0)))
-    fn = int(np.sum(~pred & (y == 1)))
-    tn = int(np.sum(~pred & (y == 0)))
-    return {
-        "sensitivity": tp / (tp + fn) if tp + fn else np.nan,
-        "specificity": tn / (tn + fp) if tn + fp else np.nan,
-    }
-
-
-def UBG_threshold_for_min_sensitivity(y: np.ndarray, score: np.ndarray, target: float) -> float:
-    best = None
-    for th in np.unique(score):
-        m = CV_binary_metrics(y, score, float(th))
-        if m["sensitivity"] >= target and (best is None or m["specificity"] > best[1]):
-            best = (float(th), m["specificity"])
-    if best is None:
-        return float(np.quantile(score[y == 1], 1 - target))
-    return best[0]
-
-
 LSG_SIGMA = 1.0
 LSG_OPS = [("S80", 0.80), ("S82.5", 0.825), ("S85", 0.85), ("S87.5", 0.875), ("S90", 0.90)]
 
 
-def LSG_row_norm(x: np.ndarray) -> np.ndarray:
-    m = np.nanmean(x, axis=1, keepdims=True)
-    m[~np.isfinite(m) | (m == 0)] = 1.0
-    return x / m
-
-
 def LSG_load_dataset(path: Path) -> dict:
     meta = pd.read_excel(path, sheet_name="metadata", engine="openpyxl").reset_index(drop=True)
-    raw = CV_matrix_from_sheet(pd.read_excel(path, sheet_name="aec_128", engine="openpyxl"))
+    raw = matrix_from_aec_sheet(pd.read_excel(path, sheet_name="aec_128", engine="openpyxl"))
     smooth_raw = ndimage.gaussian_filter1d(raw, sigma=LSG_SIGMA, axis=1, mode="nearest")
-    norm = LSG_row_norm(smooth_raw)
+    norm = patient_wise_mean_normalize(smooth_raw)
     sex = meta["PatientSex"].astype(str).str.upper().to_numpy()
     smi = pd.to_numeric(meta["TAMA"], errors="coerce").to_numpy(dtype=float) / (
         pd.to_numeric(meta["Height"], errors="coerce").to_numpy(dtype=float) / 100.0
@@ -1728,66 +1633,14 @@ def LSG_load_dataset(path: Path) -> dict:
 
 
 def LSG_clinical_scores(g: dict, s: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, float]]:
-    xg, xs, _ = CV_clinical_matrix(g["meta"], s["meta"])
-    folds = CV_make_folds(g["y"].astype(int), 5)
-    clinical_oof, clinical_ext = CV_oof_and_external(lambda seed: CV_clinical_estimator(), xg, g["y"].astype(int), xs, folds)
-    c_g, c_s, mu, sd = CV_zfit_apply(clinical_oof, clinical_ext)
+    xg, xs, _ = clinical_design_matrix(g["meta"], s["meta"])
+    clinical_oof, clinical_ext = fit_clinical_scores(xg, g["y"].astype(int), xs, rng=CV_RNG)
+    c_g, c_s, mu, sd = z_standardize_by_internal(clinical_oof, clinical_ext, return_stats=True)
     thresholds = {}
     for label, target in LSG_OPS:
-        th_raw = UBG_threshold_for_min_sensitivity(g["y"], clinical_oof, target)
+        th_raw = threshold_for_min_sensitivity(g["y"], clinical_oof, target)
         thresholds[label] = float((th_raw - mu) / sd)
     return clinical_oof, clinical_ext, c_g, c_s, thresholds
-
-
-def NRSCG_d1(x: np.ndarray) -> np.ndarray:
-    v = np.diff(x, axis=1)
-    return np.column_stack([v[:, :1], v])
-
-
-def NRSCG_d2(x: np.ndarray) -> np.ndarray:
-    v = np.diff(NRSCG_d1(x), axis=1)
-    return np.column_stack([v[:, :1], v])
-
-
-def NRSCG_region_descriptor_matrix(norm: np.ndarray) -> pd.DataFrame:
-    slope = NRSCG_d1(norm)
-    curv = NRSCG_d2(norm)
-    rows: dict[str, np.ndarray] = {}
-    grid = np.arange(norm.shape[1], dtype=float)
-    for region, (start, end) in NRSCG_REGIONS.items():
-        sl = slice(start - 1, end)
-        block = norm[:, sl]
-        sb = slope[:, sl]
-        cb = curv[:, sl]
-        x = grid[sl] - grid[sl].mean()
-        denom = float((x**2).sum()) or 1.0
-        prefix = f"{region}"
-        rows[f"{prefix}__level_mean"] = block.mean(axis=1)
-        rows[f"{prefix}__level_sd"] = block.std(axis=1)
-        rows[f"{prefix}__endpoint_delta"] = block[:, -1] - block[:, 0]
-        rows[f"{prefix}__linear_slope"] = ((block - block.mean(axis=1, keepdims=True)) * x[None, :]).sum(axis=1) / denom
-        rows[f"{prefix}__slope_mean"] = sb.mean(axis=1)
-        rows[f"{prefix}__slope_sd"] = sb.std(axis=1)
-        rows[f"{prefix}__abs_slope_mean"] = np.abs(sb).mean(axis=1)
-        rows[f"{prefix}__abs_slope_max"] = np.abs(sb).max(axis=1)
-        rows[f"{prefix}__curv_mean"] = cb.mean(axis=1)
-        rows[f"{prefix}__curv_sd"] = cb.std(axis=1)
-        rows[f"{prefix}__abs_curv_mean"] = np.abs(cb).mean(axis=1)
-        rows[f"{prefix}__abs_curv_max"] = np.abs(cb).max(axis=1)
-    return pd.DataFrame(rows).replace([np.inf, -np.inf], np.nan)
-
-
-def NRSCG_z_train_apply(xg_df: pd.DataFrame, xs_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    names = list(xg_df.columns)
-    xg = xg_df.to_numpy(dtype=float)
-    xs = xs_df.to_numpy(dtype=float)
-    med = np.nanmedian(xg, axis=0)
-    xg = np.where(np.isfinite(xg), xg, med[None, :])
-    xs = np.where(np.isfinite(xs), xs, med[None, :])
-    mu = xg.mean(axis=0)
-    sd = xg.std(axis=0)
-    sd[~np.isfinite(sd) | (sd < 1e-12)] = 1.0
-    return (xg - mu) / sd, (xs - mu) / sd, names
 
 
 # ---------------------------------------------------------------------------
@@ -1869,7 +1722,7 @@ def MDCARD_draw_card(
     # (e.g. "Sens loss upper 95% (1-sided) / NI pass"). Measure actual label
     # text widths and widen the first column fraction to fit, capped so the
     # value columns stay usable.
-    renderer = fig.canvas.get_renderer()
+    renderer = cast(FigureCanvasAgg, fig.canvas).get_renderer()
 
     def _text_width_in(s: str, fontsize: float, bold: bool = False) -> float:
         t = ax.text(0, 0, s, fontsize=fontsize, fontweight="bold" if bold else "normal", transform=ax.transAxes, alpha=0)
