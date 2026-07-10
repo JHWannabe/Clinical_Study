@@ -64,6 +64,40 @@ baseline(1차 스크리닝)과 같은 역할을 하는 선행 연구군.
 - [Revisiting PCA for Time Series Reduction in Temporal Dimension](https://arxiv.org/pdf/2412.19423) (arXiv, 2024) — 시계열 분류·회귀에서 PCA 기반 시간축 축소가 다운샘플링/1D-CNN 축소층보다 우수함을 실증. combo 방식(band+PCA)이 PCA 단독보다 나을 수 있다는 관찰과 같은 방향.
 - [Segmentation over Complexity: Evaluating Ensemble and Hybrid Approaches for Anomaly Detection in Industrial Time Series](https://arxiv.org/html/2510.26159) (arXiv, 2025) — 세그먼트 기반 피처 + PCA/트리 앙상블 하이브리드의 최신 실증.
 
+### 3-4. 평가 방법론 — 비열등성(Non-Inferiority) 검정 및 재분류개선(NRI)
+
+두 `stage2_*.py` 스크립트 모두 임계값(th2) 선택과 최종 채택/기각 판정을
+`noninferiority_test_sensitivity()`(Newcombe Method 10 기반 페어드 비율 차이 CI)로
+전환했다 — `model_algorithm.md`의 "임계값 선택 기준" 절 및
+[residual_reclassify_algorithm.md](residual_reclassify_algorithm.md) 4.5.1절 참고. 2022년
+이후 문헌은 검색되지 않아 원 논문(1998년, 2022년 이전 발표)을 직접 인용하되, 최신 적용 사례로
+아래를 함께 참고한다.
+
+- Newcombe RG. *Interval estimation for the difference between independent proportions:
+  comparison of eleven methods.* Stat Med. 1998 — "Method 10"(paired proportions, score-based
+  CI)의 원 출처. 2022년 이전 발표라 본 조사의 연도 기준(2022년 이후)에는 포함되지 않지만,
+  구현이 이 방법을 정확히 따르므로 정식 인용처로 필요.
+- [Comparison of the sensitivity and specificity of two diagnostic tests: paired-sample
+  confidence intervals](https://pmc.ncbi.nlm.nih.gov/articles/PMC10039285/) (BMC Med Res
+  Methodol, 2023) — 동일 환자에 대한 두 진단 검사(여기서는 Stage-1-only vs Stage-1+Stage-2)의
+  민감도/특이도 차이를 paired 신뢰구간으로 비교하는 최신 방법론 리뷰. Newcombe Method 10을
+  포함한 여러 접근을 비교하며, `noninferiority_test_sensitivity`가 다루는 문제(같은 환자 집합에
+  대한 전/후 민감도 비교)와 정확히 일치.
+- [Net Reclassification Improvement (NRI): a graphical approach](https://pmc.ncbi.nlm.nih.gov/articles/PMC10022374/)
+  (Diagn Progn Res, 2023) — `plot_clinical_vs_aec_table`가 계산하는 Net NRI(특이도 개선 flip
+  수 - 민감도 악화 flip 수)의 표준 정의와 해석 가이드. Stage-2가 Stage-1-negative를 positive로
+  뒤집지 않는 단방향 구조(By design c=0)이므로, 일반적인 양방향 NRI 공식의 특수 케이스에 해당.
+- [Statistical guidance for reporting studies evaluating diagnostic tests or prediction
+  models](https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/s12874-024-02184-9)
+  (BMC Med Res Methodol, 2024) — 진단/예측 모델의 비열등성·재분류 지표 보고 시 권고되는
+  통계적 관행 일반 가이드.
+
+이 방법론 전환의 실질적 효과: 점추정치 기준 acceptance criteria(민감도 하락 ≤5%p)에서
+CI 기반 비열등성 검정으로 바뀌면서, `model_algorithm.md` "구현 파일별 차이" 절에 기록된
+채택 spec_delta 수치가 구버전(점추정치 기준) 대비 낮아졌다 — 더 보수적인 기준으로 모델/임계값을
+선택하기 때문이며, 두 방법 모두 통계적으로 정당하지만 CI 기반 쪽이 표본 크기에 따른 불확실성을
+명시적으로 반영한다는 점에서 더 엄격하다.
+
 ## 4. 종합
 
 - `model_algorithm.md`가 다루는 문제(AEC curve → virtual phenotype → low SMI, BMI confound
@@ -74,6 +108,10 @@ baseline(1차 스크리닝)과 같은 역할을 하는 선행 연구군.
   hierarchical/Ward clustering)과 정확히 일치 — 2023 Zhang & Parnell 리뷰를 정식 인용처로
   사용 가능. FPCA 단독이 band/cluster_band보다 못한 이유(국소 신호가 전역 성분에 희석됨)도
   2022~2024년 FDA 문헌들이 공통적으로 지적하는 한계와 일치.
+- 평가 방법론(3-4절)은 원 논문(Newcombe 1998) 자체는 2022년 이전이지만, paired 민감도/특이도
+  비교와 NRI 보고에 대한 2023~2024년 방법론 문헌이 구현 방식(페어드 CI, 단방향 flip 구조,
+  Net NRI)을 그대로 뒷받침한다 — acceptance criteria를 점추정치에서 CI 기반으로 강화한 최근
+  변경의 통계적 근거로 활용 가능.
 
 ## 참고 메모
 - `model_algorithm` — 본 조사의 대상 문서

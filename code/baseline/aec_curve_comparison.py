@@ -192,9 +192,9 @@ def main():
         ("z_rangeGroup2", ["Low", "High"], ["Scan length ≤ median", "Scan length > median"],
          "09_aec_curve_by_scan_length.png", "스캔 커버리지 길이(z_range)에 따른 AEC 곡선 비교"),
         ("ContrastPhase", ["Non-contrast", "Contrast"], ["Non-contrast", "Contrast"],
-         "12_aec_curve_by_contrast.png", "조영제 사용 여부에 따른 AEC 곡선 비교"),
+         "10_aec_curve_by_contrast.png", "조영제 사용 여부에 따른 AEC 곡선 비교"),
         ("SliceThicknessGroup2", ["Low", "High"], ["Slice thickness ≤ median", "Slice thickness > median"],
-         "13_aec_curve_by_slice_thickness.png", "재구성 슬라이스 두께(중앙값 분할)에 따른 AEC 곡선 비교"),
+         "11_aec_curve_by_slice_thickness.png", "재구성 슬라이스 두께(중앙값 분할)에 따른 AEC 곡선 비교"),
     ]
 
     two_group_colors = [COL_A, COL_B]
@@ -218,7 +218,7 @@ def main():
     fig.suptitle("변수별 AEC point curve 비교 (환자 정규화, mean ± 95% CI)",
                  fontsize=14, color=INK_PRIMARY)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    savefig(fig, "10_aec_curve_combined_panel.png")
+    savefig(fig, "12_aec_curve_combined_panel.png")
 
     # 3그룹 이상 비교 (제조사, BMI 4구간, 성별x Low-SMI 조합)
     multi_specs = []
@@ -228,7 +228,7 @@ def main():
     vendor_order = vendor_counts[vendor_counts >= 30].index.tolist()
     vendor_df = vendor_df[vendor_df["Vendor"].isin(vendor_order)]
     multi_specs.append((vendor_df, "Vendor", vendor_order, vendor_order,
-                         "11_aec_curve_by_vendor.png", "스캐너 제조사(Vendor)에 따른 AEC 곡선 비교"))
+                         "13_aec_curve_by_vendor.png", "스캐너 제조사(Vendor)에 따른 AEC 곡선 비교"))
 
     bmi4_order = ["Underweight", "Normal", "Overweight", "Obese"]
     bmi4_df = df.dropna(subset=["BMIGroup4"]).copy()
