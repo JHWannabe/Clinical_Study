@@ -43,7 +43,7 @@ baseline(1차 스크리닝)과 같은 역할을 하는 선행 연구군.
 ## 3. 외부 논문 조사 — 방법론 (곡선 featurizer: FPCA / band / cluster_band / combo)
 
 ### 3-1. 전역 Functional PCA (FPCA)
-- [Functional classwise principal component analysis: a classification framework for functional data analysis](https://arxiv.org/pdf/2106.13959) (Data Min Knowl Discov, 2022) — 클래스별 FPCA 기저로 곡선을 분류에 특화된 저차원 피처로 요약. `stage2_aec_residual_reclassify.py`의 "분산 90/95%, k=4~6" FPCA 접근과 직접 비교 가능.
+- [Functional classwise principal component analysis: a classification framework for functional data analysis](https://arxiv.org/pdf/2106.13959) (Data Min Knowl Discov, 2022) — 클래스별 FPCA 기저로 곡선을 분류에 특화된 저차원 피처로 요약. `1_aec_residual_reclassify.py`의 "분산 90/95%, k=4~6" FPCA 접근과 직접 비교 가능.
 - [Functional Data Analysis: An Introduction and Recent Developments](https://onlinelibrary.wiley.com/doi/full/10.1002/bimj.202300363) (Biometrical Journal, 2024) — FDA/FPCA 최신 리뷰.
 - [Multilevel Longitudinal Functional Principal Component Model](https://onlinelibrary.wiley.com/doi/10.1002/sim.10207) (Statistics in Medicine, 2024) — 생체 센서 곡선에 FPCA 적용 실전 사례.
 - [Graphical Principal Component Analysis of Multivariate Functional Time Series](https://www.tandfonline.com/doi/full/10.1080/01621459.2024.2302198) (JASA, 2024) — 다변량 함수형 시계열 PCA 확장.
@@ -66,7 +66,7 @@ baseline(1차 스크리닝)과 같은 역할을 하는 선행 연구군.
 
 ### 3-4. 평가 방법론 — 비열등성(Non-Inferiority) 검정 및 재분류개선(NRI)
 
-두 `stage2_*.py` 스크립트 모두 임계값(th2) 선택과 최종 채택/기각 판정을
+두 `1_aec_residual_reclassify.py / 2_aec_residual_reclassify_bandfeat.py` 스크립트 모두 임계값(th2) 선택과 최종 채택/기각 판정을
 `noninferiority_test_sensitivity()`(Newcombe Method 10 기반 페어드 비율 차이 CI)로
 전환했다 — `model_algorithm.md`의 "임계값 선택 기준" 절 및
 [residual_reclassify_algorithm.md](residual_reclassify_algorithm.md) 4.5.1절 참고. 2022년

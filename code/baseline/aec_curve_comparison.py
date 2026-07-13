@@ -1,8 +1,10 @@
 """
-data/g1090.xlsx 의 'aec_128' 시트(환자별 128-slice raw AEC 프로파일)를 이용해
-성별 / 나이 / TAMA / BMI / Height / Weight 그룹 간 AEC "point curve"(슬라이스별
-평균 곡선 + 신뢰구간 리본) 비교 그래프를 그린다.
+data/gangnam.xlsx, data/sinchon.xlsx 각각의 'aec_128' 시트(환자별 128-slice raw
+AEC 프로파일)를 이용해 성별 / 나이 / TAMA / BMI / Height / Weight 그룹 간 AEC
+"point curve"(슬라이스별 평균 곡선 + 신뢰구간 리본) 비교 그래프를 그린다.
 
+- 강남(gangnam), 신촌(sinchon) 코호트를 각각 독립적으로 분석하여
+  outputs/0_aec_curve_comparison/{gangnam,sinchon}/ 에 결과를 저장한다.
 - 각 환자 곡선은 자기 자신의 평균값으로 나눠 정규화한다 (patient-normalized AEC).
 - 그룹별 정규화 곡선을 슬라이스 index(1~128)마다 평균 + 95% CI로 겹쳐 그린다.
 - 연속형 변수(Age/TAMA/BMI/Height/Weight)는 중앙값 기준 상/하 2그룹으로 나눈다.
@@ -31,9 +33,9 @@ INK_MUTED = "#898781"
 GRID = "#e1e0d9"
 SURFACE = "#fcfcfb"
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "../..", "data", "g1090.xlsx")
-OUT_DIR = os.path.join(os.path.dirname(__file__), "../..", "outputs", "aec_curve_comparison")
-os.makedirs(OUT_DIR, exist_ok=True)
+DATA_DIR = os.path.join(os.path.dirname(__file__), "../..", "data")
+OUT_ROOT = os.path.join(os.path.dirname(__file__), "../..", "outputs", "0_aec_curve_comparison")
+COHORTS = ["gangnam", "sinchon"]
 
 N_SLICES = 128
 AEC_COLS = [f"aec_{i}" for i in range(1, N_SLICES + 1)]
@@ -52,9 +54,9 @@ def style_axes(ax):
     ax.yaxis.label.set_color(INK_SECONDARY)
 
 
-def savefig(fig, name):
+def savefig(fig, out_dir, name):
     fig.patch.set_facecolor(SURFACE)
-    path = os.path.join(OUT_DIR, name)
+    path = os.path.join(out_dir, name)
     fig.savefig(path, dpi=180, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
     print(f"saved: {path}")
@@ -65,10 +67,18 @@ VENDOR_MAP = {
     "SOMATOM Definition AS+": "Siemens",
     "SOMATOM Definition Edge": "Siemens",
     "SOMATOM Definition": "Siemens",
+    "SOMATOM Definition Flash": "Siemens",
+    "SOMATOM Force": "Siemens",
     "SOMATOM Drive": "Siemens",
+    "SOMATOM go.Top": "Siemens",
     "Revolution CT": "GE",
+    "Revolution EVO": "GE",
+    "Revolution Frontier": "GE",
     "Optima CT660": "GE",
+    "LightSpeed VCT": "GE",
+    "Discovery CT750 HD": "GE",
     "Ingenuity Core 128": "Philips",
+    "iCT 256": "Philips",
     "Aquilion ONE": "Canon",
     "Aquilion": "Canon",
 }
@@ -87,9 +97,9 @@ def classify_contrast_phase(desc):
     return "Non-contrast"
 
 
-def load_data():
-    meta = pd.read_excel(DATA_PATH, sheet_name="metadata")
-    aec = pd.read_excel(DATA_PATH, sheet_name="aec_128")
+def load_data(data_path):
+    meta = pd.read_excel(data_path, sheet_name="metadata")
+    aec = pd.read_excel(data_path, sheet_name="aec_128")
 
     curves = aec[AEC_COLS].astype(float).to_numpy()
     patient_mean = curves.mean(axis=1, keepdims=True)
@@ -169,8 +179,13 @@ def group_diff_note(df, group_col, order):
     return f"Kruskal-Wallis p={p:.3g}"
 
 
-def main():
-    df = load_data()
+def run_cohort(cohort):
+    data_path = os.path.join(DATA_DIR, f"{cohort}.xlsx")
+    out_dir = os.path.join(OUT_ROOT, cohort)
+    os.makedirs(out_dir, exist_ok=True)
+
+    print(f"\n=== cohort: {cohort} ===")
+    df = load_data(data_path)
     print(f"merged patients: {len(df)}")
 
     specs = [
@@ -207,7 +222,7 @@ def main():
         ax.text(0.02, 0.02, f"patient-mean AEC {note}",
                 transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
         fig.tight_layout()
-        savefig(fig, fname)
+        savefig(fig, out_dir, fname)
 
     # 통합 4x3 패널 (2그룹 비교만)
     fig, axes = plt.subplots(4, 3, figsize=(18, 20))
@@ -218,7 +233,7 @@ def main():
     fig.suptitle("변수별 AEC point curve 비교 (환자 정규화, mean ± 95% CI)",
                  fontsize=14, color=INK_PRIMARY)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    savefig(fig, "12_aec_curve_combined_panel.png")
+    savefig(fig, out_dir, "12_aec_curve_combined_panel.png")
 
     # 3그룹 이상 비교 (제조사, BMI 4구간, 성별x Low-SMI 조합)
     multi_specs = []
@@ -227,8 +242,11 @@ def main():
     vendor_counts = vendor_df["Vendor"].value_counts()
     vendor_order = vendor_counts[vendor_counts >= 30].index.tolist()
     vendor_df = vendor_df[vendor_df["Vendor"].isin(vendor_order)]
-    multi_specs.append((vendor_df, "Vendor", vendor_order, vendor_order,
-                         "13_aec_curve_by_vendor.png", "스캐너 제조사(Vendor)에 따른 AEC 곡선 비교"))
+    if len(vendor_order) >= 2:
+        multi_specs.append((vendor_df, "Vendor", vendor_order, vendor_order,
+                             "13_aec_curve_by_vendor.png", "스캐너 제조사(Vendor)에 따른 AEC 곡선 비교"))
+    else:
+        print(f"skip vendor comparison: only {len(vendor_order)} vendor group(s) with n>=30 ({vendor_order})")
 
     bmi4_order = ["Underweight", "Normal", "Overweight", "Obese"]
     bmi4_df = df.dropna(subset=["BMIGroup4"]).copy()
@@ -249,7 +267,7 @@ def main():
         ax.text(0.02, 0.02, f"patient-mean AEC {note}",
                 transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
         fig.tight_layout()
-        savefig(fig, fname)
+        savefig(fig, out_dir, fname)
 
     # BMI 4구간 x Low-SMI 교차 패널: BMI 효과와 SMI 효과를 동시에 분리해서 확인
     bmi4_df["LowSMI"] = bmi4_df["LowSMI"].astype(str)
@@ -263,7 +281,7 @@ def main():
     fig.suptitle("BMI 4구간 내에서 Low-SMI 효과 분리 (BMI x SMI 교차비교)",
                  fontsize=14, color=INK_PRIMARY)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    savefig(fig, "16_aec_curve_bmi4_x_lowsmi_facet.png")
+    savefig(fig, out_dir, "16_aec_curve_bmi4_x_lowsmi_facet.png")
 
     # SMI를 통제한 뒤(Non-low SMI만) BMI 4구간 효과가 남는지 재비교
     controlled_df = bmi4_df[bmi4_df["LowSMI"] == "Non-low SMI"]
@@ -275,9 +293,14 @@ def main():
     ax.text(0.02, 0.02, f"patient-mean AEC {note}\n(Low-SMI 환자 제외, n={len(controlled_df)})",
             transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
     fig.tight_layout()
-    savefig(fig, "17_aec_curve_bmi4_smi_controlled.png")
+    savefig(fig, out_dir, "17_aec_curve_bmi4_smi_controlled.png")
 
-    print(f"\nAll figures saved under: {OUT_DIR}")
+    print(f"All figures saved under: {out_dir}")
+
+
+def main():
+    for cohort in COHORTS:
+        run_cohort(cohort)
 
 
 if __name__ == "__main__":

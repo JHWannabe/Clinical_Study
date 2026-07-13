@@ -17,10 +17,10 @@ from sklearn.model_selection import StratifiedKFold
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "clinic-only_baseline"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0_clinic-only_baseline"
 
-INTERNAL_XLSX = DATA_DIR / "g1090.xlsx"
-EXTERNAL_XLSX = DATA_DIR / "sdata.xlsx"
+INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
+EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
 TARGET_SENSITIVITY = 0.90
 N_FOLDS = 5
 SEED = 20260709
