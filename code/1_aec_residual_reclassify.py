@@ -102,7 +102,10 @@ def apply_aec_residualizer(reg: LinearRegression, clin_std: np.ndarray, curves: 
     return curves - reg.predict(clin_std)
 
 
-def fit_residual_pca(resid: np.ndarray, var_target: float = PCA_VAR_TARGET, n_max: int = PCA_N_MAX) -> PCA:
+def fit_residual_pca(resid: np.ndarray, var_target: float = PCA_VAR_TARGET, n_max: int = PCA_N_MAX,
+                      fixed_k: int | None = None) -> PCA:
+    if fixed_k is not None:
+        return PCA(n_components=fixed_k).fit(resid)
     probe = PCA(n_components=min(n_max, resid.shape[1])).fit(resid)
     cum = np.cumsum(probe.explained_variance_ratio_)
     k = int(np.searchsorted(cum, var_target) + 1)
@@ -442,10 +445,10 @@ def _pipeline_group_mean_ci(mat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean, ci
 
 
-def _pipeline_plot_group_curves(ax: Axes, x: np.ndarray, curves: np.ndarray, bmi_group: np.ndarray,
+def _pipeline_plot_group_curves(ax: Axes, x: np.ndarray, curves: np.ndarray, smi_group: np.ndarray,
                                  title: str, ylabel: str) -> None:
-    for val, label, color in [("Low", "BMI ≤ median", PIPE_COL_A), ("High", "BMI > median", PIPE_COL_B)]:
-        mask = bmi_group == val
+    for val, label, color in [("Low", "Low SMI (sarcopenia)", PIPE_COL_A), ("High", "Non-low SMI", PIPE_COL_B)]:
+        mask = smi_group == val
         mean, ci = _pipeline_group_mean_ci(curves[mask])
         ax.plot(x, mean, color=color, linewidth=2, label=f"{label} (n={mask.sum()})")
         ax.fill_between(x, mean - ci, mean + ci, color=color, alpha=0.18, linewidth=0)
@@ -458,14 +461,14 @@ def _pipeline_plot_group_curves(ax: Axes, x: np.ndarray, curves: np.ndarray, bmi
     _pipeline_style_axes(ax)
 
 
-def plot_aec_preprocessing_pipeline_figure(meta_int: pd.DataFrame, curves_int: np.ndarray,
+def plot_aec_preprocessing_pipeline_figure(curves_int: np.ndarray,
                                             x_int: np.ndarray, reg: LinearRegression,
-                                            resid_int: np.ndarray) -> None:
+                                            resid_int: np.ndarray, y_int: np.ndarray) -> None:
     # 4.2 AEC-128 곡선 전처리 파이프라인을 시각적으로 설명하는 그림.
     #
     #   Step 1 (정규화): 환자별 128-slice raw AEC를 환자 평균으로 나눠 스케일 차이를 제거.
     #   Step 2 (잔차화): 정규화 곡선을 표준화된 임상변수(나이/키/몸무게/성별)로 선형회귀 예측하고
-    #                    실제값 - 예측값(잔차)만 남겨, 체질량(BMI)에 의한 Simpson's paradox식
+    #                    실제값 - 예측값(잔차)만 남겨, 체질량(임상변수)에 의한 Simpson's paradox식
     #                    교란을 제거. 회귀는 내부 코호트에서만 학습.
     #   Step 3 (PCA):    잔차 128차원을 내부 코호트에서 PCA로 축소 (누적 설명분산 90%/95% 지점,
     #                     최대 10개 성분).
@@ -475,8 +478,9 @@ def plot_aec_preprocessing_pipeline_figure(meta_int: pd.DataFrame, curves_int: n
     aec = pd.read_excel(INTERNAL_XLSX, sheet_name="aec_128", engine="openpyxl")
     curves_raw_all = aec[AEC_COLS].astype(float).to_numpy()
 
-    bmi = pd.to_numeric(meta_int["BMI"], errors="coerce").to_numpy(dtype=float)
-    bmi_group = np.where(bmi <= np.nanmedian(bmi), "Low", "High")
+    # Low-SMI 임상 cutoff (성별 고정값, baseline.load_cohort()의 y 정의와 동일:
+    # SMI = TAMA / Height[m]^2, Low-SMI(y=1)는 남성 SMI<45.4, 여성 SMI<34.4).
+    smi_group = np.where(y_int == 1, "Low", "High")
 
     pca_probe = fit_residual_pca(resid_int, var_target=0.999, n_max=min(30, resid_int.shape[1]))
     cum_var = np.cumsum(pca_probe.explained_variance_ratio_)
@@ -489,7 +493,7 @@ def plot_aec_preprocessing_pipeline_figure(meta_int: pd.DataFrame, curves_int: n
 
     # --- Panel A: raw vs patient-normalized curves for 4 example patients ---
     ax = axes[0, 0]
-    rng = np.random.default_rng(20260709)
+    rng = np.random.default_rng()
     sample_idx = rng.choice(len(curves_raw_all), size=4, replace=False)
     colors4 = [PIPE_COL_A, PIPE_COL_B, PIPE_COL_C, "#4a3aa7"]
     for i, c in zip(sample_idx, colors4):
@@ -511,13 +515,13 @@ def plot_aec_preprocessing_pipeline_figure(meta_int: pd.DataFrame, curves_int: n
                   color=PIPE_INK_PRIMARY, fontsize=11, fontweight="bold")
     _pipeline_style_axes(ax)
 
-    # --- Panel B: BMI confound BEFORE residualization ---
-    _pipeline_plot_group_curves(axes[0, 2], x_idx, curves_int, bmi_group,
-                                 "Step 2a. 정규화 곡선 (잔차화 전)\nBMI에 의한 교란(Simpson's paradox) 존재",
+    # --- Panel B: Low-SMI confound BEFORE residualization ---
+    _pipeline_plot_group_curves(axes[0, 2], x_idx, curves_int, smi_group,
+                                 "Step 2a. 정규화 곡선 (잔차화 전)\nLow-SMI에 의한 교란(Simpson's paradox) 존재",
                                  "Patient-normalized AEC")
 
-    # --- Panel C: BMI confound AFTER residualization ---
-    _pipeline_plot_group_curves(axes[1, 0], x_idx, resid_int, bmi_group,
+    # --- Panel C: Low-SMI confound AFTER residualization ---
+    _pipeline_plot_group_curves(axes[1, 0], x_idx, resid_int, smi_group,
                                  "Step 2b. 잔차화 후\n(나이/키/몸무게/성별로 설명되는 부분 제거)",
                                  "Residual AEC (actual - predicted)")
 
@@ -765,7 +769,7 @@ def main() -> None:
                                 "clinical-only vs. AEC-assisted(PCA) 성능 비교 (Stage-1 vs Stage-1+Stage-2)")
 
     # ---------- 4.2 preprocessing pipeline explainer figure ----------
-    plot_aec_preprocessing_pipeline_figure(meta_int, curves_int, x_int, reg, resid_int)
+    plot_aec_preprocessing_pipeline_figure(curves_int, x_int, reg, resid_int, y_int)
 
 
 if __name__ == "__main__":

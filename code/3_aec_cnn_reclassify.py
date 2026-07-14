@@ -289,6 +289,7 @@ SWEEP_CONFIGS = [
     {"use_clinical": False, "use_stage1_score": False},  # curve only
     {"use_clinical": True, "use_stage1_score": False},   # curve + clinical
     {"use_clinical": True, "use_stage1_score": True},    # curve + clinical + stage1 score
+    {"use_clinical": False, "use_stage1_score": True},   # curve + stage1 score only (no raw clinical)
 ]
 
 # A config's internal spec_delta is only trusted for ranking if its non-inferiority

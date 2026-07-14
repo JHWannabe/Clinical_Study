@@ -17,7 +17,7 @@ from __future__ import annotations
 # the full, non-resampled training data) and shared by every bagged member, so this
 # stays a fair comparison against the base script's ensembling strategy alone.
 #
-# outputs/9_compare_cnn_variants/spec_delta_comparison.png (comparing all 6 CNN
+# outputs/100_compare_cnn_variants/spec_delta_comparison.png (comparing all 6 CNN
 # variants) showed this variant landing well below baseline (internal spec_delta
 # +0.008 vs baseline's +0.052, external +0.015 vs +0.038) -- the weakest of the 5
 # proposed improvements, alongside 5_aec_cnn_skip.py. The two knobs bagging actually
@@ -174,7 +174,7 @@ def run_grid_search() -> None:
           f"(internal spec_delta={best['spec_delta_int']:+.3f}, external spec_delta={best['spec_delta_ext']:+.3f})")
 
     # Promote the winning grid point's already-computed outputs into the canonical
-    # outputs/6_aec_cnn_bagging/ folder, so 9_compare_cnn_variants.py keeps working
+    # outputs/6_aec_cnn_bagging/ folder, so 100_compare_cnn_variants.py keeps working
     # unchanged -- no need to retrain the winner a second time.
     winner_dir = GRID_DIR / best["tag"]
     for name in ["stage1_vs_stage2_summary.csv", "stage2_cnn_sweep_ranking.csv",

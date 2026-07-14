@@ -35,7 +35,7 @@ from __future__ import annotations
 # init), h3 == h2 exactly (block3 contributes nothing), i.e. training starts from the
 # plain 2-block network baseline already knows works. But fixing the init at exactly
 # 0 and the shortcut kernel at 3 was itself an unvalidated guess -- outputs/
-# 9_compare_cnn_variants/spec_delta_comparison.png (comparing all 6 CNN variants)
+# 100_compare_cnn_variants/spec_delta_comparison.png (comparing all 6 CNN variants)
 # showed this variant landing well below baseline (internal +0.017 vs +0.052,
 # external +0.008 vs +0.038), the weakest improvement of the 5 proposed here. Rather
 # than keep guessing one config at a time, `run_grid_search()` below now sweeps both
@@ -191,7 +191,7 @@ def run_grid_search() -> None:
           f"(internal spec_delta={best['spec_delta_int']:+.3f}, external spec_delta={best['spec_delta_ext']:+.3f})")
 
     # Promote the winning grid point's already-computed outputs into the canonical
-    # outputs/5_aec_cnn_skip/ folder, so 9_compare_cnn_variants.py keeps working
+    # outputs/5_aec_cnn_skip/ folder, so 100_compare_cnn_variants.py keeps working
     # unchanged -- no need to retrain the winner a second time.
     winner_dir = GRID_DIR / best["tag"]
     for name in ["stage1_vs_stage2_summary.csv", "stage2_cnn_sweep_ranking.csv",

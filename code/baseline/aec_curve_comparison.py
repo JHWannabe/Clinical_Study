@@ -7,7 +7,9 @@ AEC 프로파일)를 이용해 성별 / 나이 / TAMA / BMI / Height / Weight �
   outputs/0_aec_curve_comparison/{gangnam,sinchon}/ 에 결과를 저장한다.
 - 각 환자 곡선은 자기 자신의 평균값으로 나눠 정규화한다 (patient-normalized AEC).
 - 그룹별 정규화 곡선을 슬라이스 index(1~128)마다 평균 + 95% CI로 겹쳐 그린다.
-- 연속형 변수(Age/TAMA/BMI/Height/Weight)는 중앙값 기준 상/하 2그룹으로 나눈다.
+- 연속형 변수(Age/TAMA/BMI/Height/Weight/Myosteatosis비율/ScanLength/SliceThickness)는
+  남/여 각각의 median 기준 상/하 2그룹으로 나눈다 (성별에 따라 분포 자체가 다르므로
+  전체 median 하나로 나누면 그룹이 성별과 뒤섞임).
 - 레거시 파이프라인(main_aec_full_derivation_pipeline_simplified.py 등)은
   재사용하지 않고 이 스크립트에서 새로 계산한다.
 """
@@ -97,6 +99,19 @@ def classify_contrast_phase(desc):
     return "Non-contrast"
 
 
+def sex_median_group2(df, col):
+    # 전체 median이 아니라 남/여 각각의 median으로 Low/High를 나눈다 (성별에 따라
+    # 분포 자체가 다른 변수를 하나의 median으로 나누면 그룹이 성별과 뒤섞여 Simpson's
+    # paradox식 교란이 생김).
+    sex = df["PatientSex"].astype(str).str.upper()
+    group = pd.Series(index=df.index, dtype=object)
+    for s in sex.unique():
+        mask = (sex == s).to_numpy()
+        med = df.loc[mask, col].median()
+        group.loc[mask] = np.where(df.loc[mask, col] <= med, "Low", "High")
+    return group.to_numpy()
+
+
 def load_data(data_path):
     meta = pd.read_excel(data_path, sheet_name="metadata")
     aec = pd.read_excel(data_path, sheet_name="aec_128")
@@ -112,23 +127,20 @@ def load_data(data_path):
 
     df = meta.merge(norm_df, on="PatientID", how="inner")
 
-    df["AgeGroup2"] = np.where(df.PatientAge <= df.PatientAge.median(), "Low", "High")
+    df["AgeGroup2"] = sex_median_group2(df, "PatientAge")
     for col in ["TAMA", "BMI", "Height", "Weight", "z_range"]:
-        med = df[col].median()
-        df[f"{col}Group2"] = np.where(df[col] <= med, "Low", "High")
+        df[f"{col}Group2"] = sex_median_group2(df, col)
 
     cutoff = df["PatientSex"].map(LOW_SMI_CUTOFF)
     df["LowSMI"] = np.where(df["SMI"] < cutoff, "Low SMI", "Non-low SMI")
 
     df["IMATA_TAMA_ratio"] = df["IMATA"] / df["TAMA"]
-    med = df["IMATA_TAMA_ratio"].median()
-    df["MyosteatosisGroup2"] = np.where(df["IMATA_TAMA_ratio"] <= med, "Low", "High")
+    df["MyosteatosisGroup2"] = sex_median_group2(df, "IMATA_TAMA_ratio")
 
     df["Vendor"] = df["Manufacturer"].map(VENDOR_MAP)
 
     df["SliceThickness"] = df["z_range"] / df["n_slices_cropped"]
-    med = df["SliceThickness"].median()
-    df["SliceThicknessGroup2"] = np.where(df["SliceThickness"] <= med, "Low", "High")
+    df["SliceThicknessGroup2"] = sex_median_group2(df, "SliceThickness")
 
     df["ContrastPhase"] = df["Series_Desc"].map(classify_contrast_phase)
 
@@ -190,26 +202,26 @@ def run_cohort(cohort):
 
     specs = [
         ("PatientSex", ["M", "F"], ["Male", "Female"], "01_aec_curve_by_sex.png", "성별에 따른 AEC 곡선 비교"),
-        ("AgeGroup2", ["Low", "High"], ["Age ≤ median", "Age > median"],
-         "02_aec_curve_by_age.png", "나이(중앙값 분할)에 따른 AEC 곡선 비교"),
-        ("TAMAGroup2", ["Low", "High"], ["TAMA ≤ median", "TAMA > median"],
-         "03_aec_curve_by_tama.png", "TAMA(중앙값 분할)에 따른 AEC 곡선 비교"),
-        ("BMIGroup2", ["Low", "High"], ["BMI ≤ median", "BMI > median"],
-         "04_aec_curve_by_bmi.png", "BMI(중앙값 분할)에 따른 AEC 곡선 비교"),
-        ("HeightGroup2", ["Low", "High"], ["Height ≤ median", "Height > median"],
-         "05_aec_curve_by_height.png", "신장(중앙값 분할)에 따른 AEC 곡선 비교"),
-        ("WeightGroup2", ["Low", "High"], ["Weight ≤ median", "Weight > median"],
-         "06_aec_curve_by_weight.png", "체중(중앙값 분할)에 따른 AEC 곡선 비교"),
+        ("AgeGroup2", ["Low", "High"], ["Age ≤ 성별 median", "Age > 성별 median"],
+         "02_aec_curve_by_age.png", "나이(성별 median 분할)에 따른 AEC 곡선 비교"),
+        ("TAMAGroup2", ["Low", "High"], ["TAMA ≤ 성별 median", "TAMA > 성별 median"],
+         "03_aec_curve_by_tama.png", "TAMA(성별 median 분할)에 따른 AEC 곡선 비교"),
+        ("BMIGroup2", ["Low", "High"], ["BMI ≤ 성별 median", "BMI > 성별 median"],
+         "04_aec_curve_by_bmi.png", "BMI(성별 median 분할)에 따른 AEC 곡선 비교"),
+        ("HeightGroup2", ["Low", "High"], ["Height ≤ 성별 median", "Height > 성별 median"],
+         "05_aec_curve_by_height.png", "신장(성별 median 분할)에 따른 AEC 곡선 비교"),
+        ("WeightGroup2", ["Low", "High"], ["Weight ≤ 성별 median", "Weight > 성별 median"],
+         "06_aec_curve_by_weight.png", "체중(성별 median 분할)에 따른 AEC 곡선 비교"),
         ("LowSMI", ["Low SMI", "Non-low SMI"], ["Low SMI (sarcopenia)", "Non-low SMI"],
          "07_aec_curve_by_low_smi.png", "Low-SMI 임상 cutoff에 따른 AEC 곡선 비교"),
-        ("MyosteatosisGroup2", ["Low", "High"], ["IMATA/TAMA ≤ median", "IMATA/TAMA > median"],
-         "08_aec_curve_by_myosteatosis.png", "IMATA/TAMA 비율(근지방침윤)에 따른 AEC 곡선 비교"),
-        ("z_rangeGroup2", ["Low", "High"], ["Scan length ≤ median", "Scan length > median"],
-         "09_aec_curve_by_scan_length.png", "스캔 커버리지 길이(z_range)에 따른 AEC 곡선 비교"),
+        ("MyosteatosisGroup2", ["Low", "High"], ["IMATA/TAMA ≤ 성별 median", "IMATA/TAMA > 성별 median"],
+         "08_aec_curve_by_myosteatosis.png", "IMATA/TAMA 비율(근지방침윤, 성별 median 분할)에 따른 AEC 곡선 비교"),
+        ("z_rangeGroup2", ["Low", "High"], ["Scan length ≤ 성별 median", "Scan length > 성별 median"],
+         "09_aec_curve_by_scan_length.png", "스캔 커버리지 길이(z_range, 성별 median 분할)에 따른 AEC 곡선 비교"),
         ("ContrastPhase", ["Non-contrast", "Contrast"], ["Non-contrast", "Contrast"],
          "10_aec_curve_by_contrast.png", "조영제 사용 여부에 따른 AEC 곡선 비교"),
-        ("SliceThicknessGroup2", ["Low", "High"], ["Slice thickness ≤ median", "Slice thickness > median"],
-         "11_aec_curve_by_slice_thickness.png", "재구성 슬라이스 두께(중앙값 분할)에 따른 AEC 곡선 비교"),
+        ("SliceThicknessGroup2", ["Low", "High"], ["Slice thickness ≤ 성별 median", "Slice thickness > 성별 median"],
+         "11_aec_curve_by_slice_thickness.png", "재구성 슬라이스 두께(성별 median 분할)에 따른 AEC 곡선 비교"),
     ]
 
     two_group_colors = [COL_A, COL_B]
