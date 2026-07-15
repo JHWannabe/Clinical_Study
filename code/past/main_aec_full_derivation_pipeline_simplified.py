@@ -62,10 +62,10 @@ from sklearn.linear_model import LogisticRegression
 # ---------------------------------------------------------------------------
 
 SCRIPT_PATH = Path(__file__).resolve()
-PROJECT_ROOT = SCRIPT_PATH.parents[1]
+PROJECT_ROOT = SCRIPT_PATH.parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-INTERNAL_XLSX = DATA_DIR / "g1090.xlsx"
-EXTERNAL_XLSX = DATA_DIR / "sdata.xlsx"
+INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
+EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
 OUT_DIR = PROJECT_ROOT /  "outputs" / "full_derivation" /  "full_derivation_output"
 PLOT_1X3_OUT_DIR = PROJECT_ROOT /  "outputs" / "full_derivation" / "aec_1x3_core_mean_curves"
 
@@ -131,8 +131,8 @@ REGION_SPANS = [
 ]
 
 # cohort -> (display title, JSON dataset label) for the section 8 figures.
-COHORT_TITLE = {"internal": "Internal (g1090)", "external": "External"}
-COHORT_DATASET = {"internal": "g1090", "external": "sdata"}
+COHORT_TITLE = {"internal": "Internal (gangnam)", "external": "External"}
+COHORT_DATASET = {"internal": "gangnam", "external": "sinchon"}
 
 
 # Secondary CNN-mimic output from the previous full CNN training/search.
@@ -1539,8 +1539,8 @@ def run_plot_1x3_mean_curves() -> None:
     docstring 참고.
     """
     PLOT_1X3_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    g = LSG_load_dataset(DATA_DIR / "g1090.xlsx")
-    s = LSG_load_dataset(DATA_DIR / "sdata.xlsx")
+    g = LSG_load_dataset(DATA_DIR / "gangnam.xlsx")
+    s = LSG_load_dataset(DATA_DIR / "sinchon.xlsx")
 
     c_g, c_s, xg, xs, threshold, name_to_idx = compute_clinical_and_features(g, s)
     gate_internal = compute_gate("internal", c_g, xg, threshold, name_to_idx)
@@ -1655,7 +1655,7 @@ def LSG_clinical_scores(g: dict, s: dict) -> tuple[np.ndarray, np.ndarray, np.nd
 plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
 
-MDCARD_OUT_DIR = Path(__file__).resolve().parent.parent / "outputs" / "full_derivation" / "MD"
+MDCARD_OUT_DIR = PROJECT_ROOT / "outputs" / "full_derivation" / "MD"
 
 MDCARD_HEADER_BG = "#F2F2F2"
 MDCARD_LINE_COLOR = "#DDDDDD"
@@ -1864,7 +1864,7 @@ def MDCARD_main() -> None:
         sections=[
             {
                 "header": "Cohort / Clinical Baseline (S90 operating point)",
-                "columns": ["항목", "Internal (g1090)", "External (sdata)"],
+                "columns": ["항목", "Internal (gangnam)", "External (sinchon)"],
                 "rows": [
                     ["N", str(cohort["n"][0]), str(cohort["n"][1])],
                     ["Low SMI(+) actual", f"{cohort['low_smi_n'][0]} ({MDCARD_pct(cohort['low_smi_rate'][0])})", f"{cohort['low_smi_n'][1]} ({MDCARD_pct(cohort['low_smi_rate'][1])})"],
@@ -1877,7 +1877,7 @@ def MDCARD_main() -> None:
             },
             {
                 "header": "Primary: Interpretable 4-region AEC Gate  (new4_combo_261089)",
-                "columns": ["항목", "Internal (g1090)", "External (sdata)"],
+                "columns": ["항목", "Internal (gangnam)", "External (sinchon)"],
                 "rows": MDCARD_gate_rows(primary),
             },
         ],
@@ -1900,7 +1900,7 @@ def MDCARD_main() -> None:
                         f"patterns={{{','.join(sorted(CNN_SELECTED_PATTERNS))}}}, 확률파일={CNN_PROBABILITY_NPZ.name}\n"
                         "— outputs/MD/144838527.png 원본 스크린샷 재현 설정 (surrogate_mimic_summary.json의 internal_external_audit 승자와는 다른 별개 규칙)."
                     ),
-                    "columns": ["항목", "Internal (g1090)", "External (sdata)"],
+                    "columns": ["항목", "Internal (gangnam)", "External (sinchon)"],
                     "rows": MDCARD_gate_rows(secondary),
                 },
             ],

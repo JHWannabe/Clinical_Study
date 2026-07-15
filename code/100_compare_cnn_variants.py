@@ -73,7 +73,8 @@ def main() -> None:
     combined["description"] = combined["variant"].map(descriptions)
 
     cols = ["variant", "description", "cohort", "sens_delta", "spec_delta", "verdict",
-            "ni_verdict", "sens_combined", "spec_combined", "ppv_combined", "acc_combined"]
+            "ni_verdict", "ni_ci_upper_97.5", "ni_margin", "sens_combined", "spec_combined",
+            "ppv_combined", "acc_combined"]
     table = combined[cols].copy()
     table_path = OUTPUT_DIR / "comparison_summary.csv"
     table.to_csv(table_path, index=False)
@@ -87,12 +88,16 @@ def main() -> None:
     labels = [label for label, _, _ in VARIANTS if label in descriptions]
     internal_spec = []
     external_spec = []
+    internal_ni_ci_upper = []
+    external_ni_ci_upper = []
     external_pass = []
     for label in labels:
         row_int = combined[(combined["variant"] == label) & (combined["cohort"] == "internal")]
         row_ext = combined[(combined["variant"] == label) & (combined["cohort"] == "external")]
         internal_spec.append(float(row_int["spec_delta"].iloc[0]) if len(row_int) else np.nan)
         external_spec.append(float(row_ext["spec_delta"].iloc[0]) if len(row_ext) else np.nan)
+        internal_ni_ci_upper.append(float(row_int["ni_ci_upper_97.5"].iloc[0]) if len(row_int) else np.nan)
+        external_ni_ci_upper.append(float(row_ext["ni_ci_upper_97.5"].iloc[0]) if len(row_ext) else np.nan)
         external_pass.append(str(row_ext["verdict"].iloc[0]) if len(row_ext) else "N/A")
 
     x = np.arange(len(labels))
@@ -101,10 +106,21 @@ def main() -> None:
     bars_int = ax.bar(x - width / 2, internal_spec, width, label="internal spec_delta", color="#2a78d6")
     bars_ext = ax.bar(x + width / 2, external_spec, width, label="external spec_delta", color="#eda100")
 
-    for bar, verdict in zip(bars_ext, external_pass):
-        color = "#1a7a4c" if verdict == "PASS" else "#c0392b"
+    for bar, value in zip(bars_int, internal_ni_ci_upper):
+        if np.isnan(value):
+            continue
+        va = "bottom" if bar.get_height() >= 0 else "top"
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                verdict, ha="center", va="bottom" if bar.get_height() >= 0 else "top",
+                f"NI {value * 100:.1f}%p", ha="center", va=va,
+                fontsize=8, color="#2a78d6", fontweight="bold")
+
+    for bar, value, verdict in zip(bars_ext, external_ni_ci_upper, external_pass):
+        if np.isnan(value):
+            continue
+        color = "#1a7a4c" if verdict == "PASS" else "#c0392b"
+        va = "bottom" if bar.get_height() >= 0 else "top"
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                f"NI {value * 100:.1f}%p\n{verdict}", ha="center", va=va,
                 fontsize=8, color=color, fontweight="bold")
 
     ax.axhline(0.0, color="black", linewidth=0.8)

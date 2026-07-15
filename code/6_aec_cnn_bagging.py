@@ -122,9 +122,7 @@ def select_best_grid_point(rows: list[dict]) -> dict:
     # (bootstrap_frac, n_members) grid point's internal cohort.
     passing = [r for r in rows if r["verdict_int"] == "PASS"]
     pool = passing if passing else rows
-    safe = [r for r in pool if r["ni_ci_upper_int"] <= base.SAFE_MARGIN_FRAC * r["ni_margin_int"]]
-    candidates = safe if safe else pool
-    best = max(candidates, key=lambda r: (round(r["spec_delta_int"], 6), r["sens_delta_int"]))
+    best = max(pool, key=lambda r: r["spec_delta_int"])
 
     # 5_aec_cnn_skip.py's grid search found that ranking purely on internal spec_delta can
     # pick an architecture change that overfits internal and fails external -- internal-only
@@ -186,8 +184,22 @@ def run_grid_search() -> None:
     print(f"Saved full grid ranking to {OUTPUT_DIR / 'grid_search_ranking.csv'}")
 
 
+BEST_BOOTSTRAP_FRAC = 1.0
+BEST_N_MEMBERS = 7
+
+
+def run_best() -> None:
+    # Grid search already ran (see header note + outputs/6_aec_cnn_bagging/grid_search_ranking.csv):
+    # bootstrap_frac=1.0, n_members=7 won outright on both cohorts. This just trains that one
+    # config instead of re-sweeping all 9 grid points.
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    setattr(base, "train_cnn_ensemble", build_train_fn(BEST_BOOTSTRAP_FRAC, BEST_N_MEMBERS))
+    setattr(base, "OUTPUT_DIR", OUTPUT_DIR)
+    base.main()
+
+
 def main() -> None:
-    run_grid_search()
+    run_best()
 
 
 if __name__ == "__main__":

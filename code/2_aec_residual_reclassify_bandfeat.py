@@ -69,11 +69,6 @@ NI_Z = float(norm.ppf(1 - NI_ALPHA))
 # Selecting against a stricter internal margin buys that headroom without ever looking at the
 # external cohort's outcome to pick among candidate configs.
 SELECTION_MARGIN = 0.6 * SENS_NONINF_MARGIN
-# Among configs within this much internal spec_delta of the best-scoring config, prefer a
-# band/cluster_band curve feature over pca/combo: localized-slice features are easier to
-# interpret clinically than whole-curve PCA modes, so a near-tied win should go to them.
-TIE_BREAK_SPEC_DELTA_TOL = 0.005
-BAND_LIKE_FEAT_KINDS = {"band", "cluster_band"}
 
 N_SLICES = 128
 AEC_COLS = [f"aec_{i}" for i in range(1, N_SLICES + 1)]
@@ -378,8 +373,7 @@ def evaluate_combined(cohort: str, y: np.ndarray, pred: np.ndarray) -> dict:
             "acc": acc, "sens": sens, "spec": spec, "ppv": ppv, "npv": npv}
 
 
-def plot_confusion_matrix(ax: Axes, result: dict, title: str, baseline_res: dict | None = None,
-                            mcnemar_res: dict | None = None, ni_res: dict | None = None) -> None:
+def plot_confusion_matrix(ax: Axes, result: dict, title: str) -> None:
     matrix = result["matrix"]
     ax.imshow(matrix, cmap="Blues", vmin=0, vmax=max(matrix.max(), 1))
     labels = [["TP", "FN"], ["FP", "TN"]]
@@ -390,29 +384,6 @@ def plot_confusion_matrix(ax: Axes, result: dict, title: str, baseline_res: dict
     ax.set_xticks([0, 1]); ax.set_xticklabels(["Predicted Positive", "Predicted Negative"])
     ax.set_yticks([0, 1]); ax.set_yticklabels(["Actual Positive", "Actual Negative"])
     ax.set_title(title, fontsize=11, fontweight="bold")
-
-    def fmt(name: str, key: str) -> str:
-        val = result[key]
-        if baseline_res is None:
-            return f"{name}={val:.3f}"
-        delta = val - baseline_res[key]
-        return f"{name}={val:.3f} ({delta * 100:+.1f}%)"
-
-    line1 = f"{fmt('Acc', 'acc')}  {fmt('Sens', 'sens')}  {fmt('Spec', 'spec')}"
-    line2 = f"{fmt('PPV', 'ppv')}  {fmt('NPV', 'npv')}"
-    xlabel = f"{line1}\n{line2}"
-    if mcnemar_res is not None:
-        def pfmt(p: float) -> str:
-            return "<0.001" if p < 0.001 else f"{p:.3f}"
-        line3 = (f"McNemar p (Sens)={pfmt(mcnemar_res['sens_p'])}  "
-                 f"McNemar p (Spec)={pfmt(mcnemar_res['spec_p'])}")
-        xlabel = f"{xlabel}\n{line3}"
-    if ni_res is not None:
-        verdict = "PASS" if ni_res["noninferior"] else "FAIL"
-        line4 = (f"Sens NI (margin={ni_res['margin']:.2f}): drop={ni_res['sens_drop']:.3f}  "
-                 f"97.5%CI upper={ni_res['ci_upper']:.3f}  -> {verdict}")
-        xlabel = f"{xlabel}\n{line4}"
-    ax.set_xlabel(xlabel, fontsize=9.5)
 
 
 TABLE_HEADER_BG = "#1c1c1c"
@@ -428,6 +399,8 @@ TABLE_NRI_FG = "#1553b6"
 TABLE_TEXT = "#161616"
 TABLE_MUTED = "#4d4c48"
 TABLE_SUBTEXT = "#6b6a66"
+TABLE_PASS_BG = "#dcefe1"
+TABLE_FAIL_BG = "#f8dcd8"
 
 
 def plot_clinical_vs_aec_table(rows: list[dict], out_path: Path, title: str) -> None:
@@ -440,9 +413,9 @@ def plot_clinical_vs_aec_table(rows: list[dict], out_path: Path, title: str) -> 
     plt.rcParams["axes.unicode_minus"] = False
 
     metrics = [("sens", "Sensitivity"), ("spec", "Specificity"), ("acc", "Accuracy")]
-    row_h, header_h, footer_h = 1.0, 1.7, 0.55
-    n_metric_rows = len(rows) * len(metrics)
-    total_h = header_h + n_metric_rows * row_h + footer_h
+    row_h, header_h, footer_h, ni_row_h = 1.0, 1.7, 0.55, 0.6
+    block_h = len(metrics) * row_h + ni_row_h
+    total_h = header_h + len(rows) * block_h + footer_h
 
     col = {"cohort": (0.00, 0.15), "n": (0.15, 0.205), "event": (0.205, 0.26),
            "metric": (0.26, 0.40), "clin": (0.40, 0.62), "aec": (0.62, 0.90), "nri": (0.90, 1.00)}
@@ -477,9 +450,9 @@ def plot_clinical_vs_aec_table(rows: list[dict], out_path: Path, title: str) -> 
     y_cursor = header_bottom
     for gi, r in enumerate(rows):
         block_top = y_cursor
-        block_bottom = y_cursor - len(metrics) * row_h
+        block_bottom = y_cursor - block_h
         if gi % 2 == 0:
-            ax.add_patch(Rectangle((0, block_bottom), 1, len(metrics) * row_h,
+            ax.add_patch(Rectangle((0, block_bottom), 1, block_h,
                                     facecolor=TABLE_BAND_BG, edgecolor="none", zorder=0))
 
         mid_y = (block_top + block_bottom) / 2
@@ -517,14 +490,45 @@ def plot_clinical_vs_aec_table(rows: list[dict], out_path: Path, title: str) -> 
             ax.text(aec_x0 + (aec_x1 - aec_x0) * 0.72, row_mid, f"({delta:+.3f}) {pfmt(p_val)}",
                     ha="center", va="center", fontsize=9.5, color=dcolor)
 
-            if mi < len(metrics) - 1:
-                ax.plot([col["metric"][0], 1], [row_bottom, row_bottom], color=TABLE_GRID,
-                        linewidth=0.8, zorder=1)
+            ax.plot([col["metric"][0], 1], [row_bottom, row_bottom], color=TABLE_GRID,
+                    linewidth=0.8, zorder=1)
+
+        # NI test row: non-inferiority of sensitivity loss (noninferiority_test_sensitivity,
+        # Wilson-score 97.5% CI vs SENS_NONINF_MARGIN), same PASS/FAIL already printed to
+        # console as NON-INFERIOR/NOT NON-INFERIOR.
+        ni_top = block_top - len(metrics) * row_h
+        ni_bottom = ni_top - ni_row_h
+        ni_mid = (ni_top + ni_bottom) / 2
+        ni_pass = bool(r["ni_pass"])
+        ni_color = TABLE_GOOD if ni_pass else TABLE_BAD
+
+        ax.text(cx("metric"), ni_mid, "NI Test", ha="center", va="center",
+                fontsize=11.5, color=TABLE_TEXT)
+        ax.text(cx("clin"), ni_mid, f"margin ≤{r['ni_margin'] * 100:.1f}%p", ha="center", va="center",
+                fontsize=10.5, color=TABLE_MUTED)
+        aec_x0, aec_x1 = col["aec"]
+        ax.text(aec_x0 + (aec_x1 - aec_x0) * 0.5, ni_mid,
+                f"sens loss 97.5% CI upper = {r['ni_ci_upper'] * 100:.2f}%p",
+                ha="center", va="center", fontsize=10.5, color=TABLE_TEXT)
+
+        badge_w, badge_h = 0.07, 0.44 if ni_pass else 0.52
+        ax.add_patch(FancyBboxPatch((cx("nri") - badge_w / 2, ni_mid - badge_h / 2), badge_w, badge_h,
+                                     boxstyle="round,pad=0.01,rounding_size=0.02",
+                                     linewidth=0, facecolor=TABLE_PASS_BG if ni_pass else TABLE_FAIL_BG, zorder=2))
+        if ni_pass:
+            ax.text(cx("nri"), ni_mid, "PASS", ha="center", va="center",
+                    fontsize=11, fontweight="bold", color=ni_color, zorder=3)
+        else:
+            ax.text(cx("nri"), ni_mid + 0.13, f"{r['ni_ci_upper'] * 100:.1f}%", ha="center", va="center",
+                    fontsize=9, fontweight="bold", color=ni_color, zorder=3)
+            ax.text(cx("nri"), ni_mid - 0.11, "FAIL", ha="center", va="center",
+                    fontsize=11, fontweight="bold", color=ni_color, zorder=3)
 
         y_cursor = block_bottom
         ax.plot([0, 1], [block_bottom, block_bottom], color=TABLE_DIVIDER, linewidth=1.4, zorder=2)
 
-    footnote = "* p < 0.05 (유의)    n.s. p ≥ 0.05 (비유의)    Net NRI: AEC 추가 시 순 재분류 개선 환자 수"
+    footnote = ("* p < 0.05 (유의)    n.s. p ≥ 0.05 (비유의)    Net NRI: AEC 추가 시 순 재분류 개선 환자 수    "
+                "NI Test: 민감도 손실 97.5% CI 상한이 margin 이하이면 PASS (비열등성)")
     ax.text(0.0, footer_h * 0.4, footnote, ha="left", va="center", fontsize=9, color=TABLE_SUBTEXT)
 
     fig.suptitle(title, x=0.02, y=0.99, ha="left", fontsize=15, fontweight="bold", color=TABLE_TEXT)
@@ -732,11 +736,7 @@ def main() -> None:
 
     passing = [s for s in sweep_state.values() if s["ok"]]
     pool = passing if passing else list(sweep_state.values())
-    best_spec_delta = max(s["spec_delta"] for s in pool)
-    near_best = [s for s in pool if best_spec_delta - s["spec_delta"] <= TIE_BREAK_SPEC_DELTA_TOL]
-    band_like = [s for s in near_best if s["cfg"]["curve_feat"][0] in BAND_LIKE_FEAT_KINDS]
-    tie_break_pool = band_like if band_like else near_best
-    best = max(tie_break_pool, key=lambda s: s["spec_delta"])
+    best = max(pool, key=lambda s: s["spec_delta"])
     cfg, feat_state, th2 = best["cfg"], best["feat_state"], best["th2"]
     print(f"\nSelected config: {cfg} (internal spec_delta={best['spec_delta']:+.3f}, "
           f"sens_delta={best['sens_delta']:+.3f})")
@@ -805,11 +805,9 @@ def main() -> None:
     # ---------- figures ----------
     fig, axes = plt.subplots(2, 2, figsize=(12, 12.5))
     plot_confusion_matrix(axes[0, 0], baseline_int, "Internal: Stage-1 only (OOF)")
-    plot_confusion_matrix(axes[0, 1], combined_int, "Internal: Stage-1+Stage-2 (OOF)",
-                          baseline_res=baseline_int, mcnemar_res=mcnemar_int, ni_res=ni_int)
+    plot_confusion_matrix(axes[0, 1], combined_int, "Internal: Stage-1+Stage-2 (OOF)")
     plot_confusion_matrix(axes[1, 0], baseline_ext, "External: Stage-1 only (frozen)")
-    plot_confusion_matrix(axes[1, 1], combined_ext, "External: Stage-1+Stage-2 (frozen)",
-                          baseline_res=baseline_ext, mcnemar_res=mcnemar_ext, ni_res=ni_ext)
+    plot_confusion_matrix(axes[1, 1], combined_ext, "External: Stage-1+Stage-2 (frozen)")
     fig.suptitle(f"Stage-2 reclassification of screen-positives "
                  f"(clinical + AEC residual, {MODEL_LABELS[cfg['model_type']]}, "
                  f"{cfg['curve_feat'][0]}:{cfg['curve_feat'][1]})",
@@ -869,12 +867,14 @@ def main() -> None:
          "sens_clin": baseline_int["sens"], "spec_clin": baseline_int["spec"], "acc_clin": baseline_int["acc"],
          "sens_aec": combined_int["sens"], "spec_aec": combined_int["spec"], "acc_aec": combined_int["acc"],
          "sens_p": mcnemar_int["sens_p"], "spec_p": mcnemar_int["spec_p"], "acc_p": acc_p_int,
-         "net_nri": net_nri_int},
+         "net_nri": net_nri_int,
+         "ni_margin": ni_int["margin"], "ni_ci_upper": ni_int["ci_upper"], "ni_pass": ni_int["noninferior"]},
         {"cohort": "external", "n": len(y_ext), "event": int(y_ext.sum()), "auc": auc_ext,
          "sens_clin": baseline_ext["sens"], "spec_clin": baseline_ext["spec"], "acc_clin": baseline_ext["acc"],
          "sens_aec": combined_ext["sens"], "spec_aec": combined_ext["spec"], "acc_aec": combined_ext["acc"],
          "sens_p": mcnemar_ext["sens_p"], "spec_p": mcnemar_ext["spec_p"], "acc_p": acc_p_ext,
-         "net_nri": net_nri_ext},
+         "net_nri": net_nri_ext,
+         "ni_margin": ni_ext["margin"], "ni_ci_upper": ni_ext["ci_upper"], "ni_pass": ni_ext["noninferior"]},
     ]
     table_path = OUTPUT_DIR / "clinical_vs_aec_assisted_table.png"
     model_label = MODEL_LABELS[cfg["model_type"]]

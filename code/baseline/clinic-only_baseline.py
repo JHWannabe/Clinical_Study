@@ -133,7 +133,6 @@ def plot_confusion_matrix(ax: Axes, result: dict) -> None:
     ax.set_yticklabels(["Actual Positive", "Actual Negative"])
     label = "internal, OOF" if result["cohort"] == "internal" else "external, frozen internal model"
     ax.set_title(f"{label}\nThreshold @ Sensitivity>={TARGET_SENSITIVITY:.0%} (th={result['th']:.3f})", fontsize=11, fontweight="bold")
-    ax.set_xlabel(f"Sensitivity={result['sens']:.3f}  Specificity={result['spec']:.3f}  PPV={result['ppv']:.3f}  NPV={result['npv']:.3f}", fontsize=10)
 
 
 def main() -> None:

@@ -3,3 +3,4 @@ outputs/full_derivation/aec_new_region_cnn_surrogate_mimic_gate/surrogate_mimic_
 outputs/full_derivation/aec_new_region_cnn_surrogate_mimic_gate/surrogate_mimic_guarded_same_rule_candidates.csv
 outputs/full_derivation/full_derivation_output/04_combo_pattern_search_s90_formal_NI_candidates.csv
 __pycache__/
+*_grid/

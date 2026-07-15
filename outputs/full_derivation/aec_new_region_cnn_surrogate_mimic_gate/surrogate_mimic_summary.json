@@ -1,0 +1,142 @@
+{
+  "device": "cuda",
+  "preprocessing": "aec_128, Gaussian smoothing sigma=1, patient-wise mean normalization, row-z curve/slope/curvature channels",
+  "teacher_branches": [
+    {
+      "region": "R1_045_056",
+      "descriptor": "endpoint_delta",
+      "sign": -1,
+      "width": 0.35,
+      "lambda": 0.25
+    },
+    {
+      "region": "R2_057_080",
+      "descriptor": "level_mean",
+      "sign": -1,
+      "width": 0.35,
+      "lambda": 0.25
+    },
+    {
+      "region": "R3_097_128",
+      "descriptor": "endpoint_delta",
+      "sign": -1,
+      "width": 0.7,
+      "lambda": 0.25
+    },
+    {
+      "region": "R4_117_128",
+      "descriptor": "linear_slope",
+      "sign": -1,
+      "width": 0.35,
+      "lambda": 0.25
+    }
+  ],
+  "teacher_patterns": [
+    "--+-",
+    "---+",
+    "++-+",
+    "--++",
+    "++++"
+  ],
+  "teacher_pattern_mask": 39184,
+  "target_ops": [
+    "S80",
+    "S85",
+    "S90"
+  ],
+  "configs": [
+    {
+      "name": "surrogate_mimic_balanced",
+      "hidden": 10,
+      "dropout": 0.2,
+      "lr": 0.0008,
+      "weight_decay": 0.001,
+      "consensus_weight": 0.65,
+      "non_cpos_weight": 0.04,
+      "max_epochs": 180,
+      "patience": 22,
+      "batch_size": 96
+    },
+    {
+      "name": "surrogate_mimic_guarded",
+      "hidden": 12,
+      "dropout": 0.3,
+      "lr": 0.0006,
+      "weight_decay": 0.002,
+      "consensus_weight": 0.85,
+      "non_cpos_weight": 0.02,
+      "max_epochs": 180,
+      "patience": 22,
+      "batch_size": 96
+    }
+  ],
+  "n_candidates": 582485,
+  "n_internal_passing": 211260,
+  "n_internal_external_passing": 164541,
+  "winners": {
+    "internal_locked": {
+      "config": "surrogate_mimic_guarded",
+      "rule": "surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668",
+      "threshold_R1": 0.65,
+      "threshold_R2": 0.45,
+      "threshold_R3": 0.75,
+      "threshold_R4": 0.45,
+      "pattern_mask": 16668,
+      "patterns": "-+--,++--,--+-,---+,-+++",
+      "n_patterns": 5,
+      "internal_mean_accuracy": 0.6951070336391437,
+      "internal_mean_accuracy_gain": 0.04617737003058104,
+      "internal_min_accuracy_gain": 0.04220183486238532,
+      "internal_mean_specificity_gain": 0.057232049947970855,
+      "internal_min_specificity_gain": 0.05202913631633715,
+      "internal_max_sensitivity_loss": 0.03875968992248062,
+      "internal_min_sensitivity_loss_p": 0.0625,
+      "internal_min_deesc_n": 54,
+      "internal_mean_event_rate": 0.07844092802813134,
+      "external_mean_accuracy": 0.6594672426205904,
+      "external_mean_accuracy_gain": 0.047516198704103674,
+      "external_min_accuracy_gain": 0.042116630669546434,
+      "external_mean_specificity_gain": 0.0653927813163482,
+      "external_min_specificity_gain": 0.062420382165605096,
+      "external_max_sensitivity_loss": 0.07092198581560284,
+      "external_min_sensitivity_loss_p": 0.001953125,
+      "external_min_deesc_n": 58,
+      "external_mean_event_rate": 0.12487823884667835,
+      "internal_pass": true,
+      "external_pass": false,
+      "internal_selection_score": 0.7143985207651445
+    },
+    "internal_external_audit": {
+      "config": "surrogate_mimic_guarded",
+      "rule": "surrogate_mimic_guarded_t0.60_0.80_0.50_0.50_m38656",
+      "threshold_R1": 0.6,
+      "threshold_R2": 0.8,
+      "threshold_R3": 0.5,
+      "threshold_R4": 0.5,
+      "pattern_mask": 38656,
+      "patterns": "---+,+--+,-+-+,--++,++++",
+      "n_patterns": 5,
+      "internal_mean_accuracy": 0.6850152905198778,
+      "internal_mean_accuracy_gain": 0.036085626911314984,
+      "internal_min_accuracy_gain": 0.031192660550458717,
+      "internal_mean_specificity_gain": 0.04543877904960111,
+      "internal_min_specificity_gain": 0.03850156087408949,
+      "internal_max_sensitivity_loss": 0.03875968992248062,
+      "internal_min_sensitivity_loss_p": 0.0625,
+      "internal_min_deesc_n": 40,
+      "internal_mean_event_rate": 0.08996751624187906,
+      "external_mean_accuracy": 0.6785457163426925,
+      "external_mean_accuracy_gain": 0.06659467242620591,
+      "external_min_accuracy_gain": 0.061555075593952485,
+      "external_mean_specificity_gain": 0.08322717622080679,
+      "external_min_specificity_gain": 0.07770700636942675,
+      "external_max_sensitivity_loss": 0.028368794326241134,
+      "external_min_sensitivity_loss_p": 0.125,
+      "external_min_deesc_n": 65,
+      "external_mean_event_rate": 0.05331705331705331,
+      "internal_pass": true,
+      "external_pass": true,
+      "internal_selection_score": 0.6963013364706495
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "preprocessing": "aec_128, gaussian smoothing sigma=1, patient-wise mean normalization",
+  "regions_1_indexed_inclusive": {
+    "R1_slope_around_082_085": [
+      76,
+      92
+    ],
+    "R2_abs_slope_around_094_099": [
+      88,
+      106
+    ],
+    "R3_curv_around_103_110": [
+      96,
+      118
+    ],
+    "R4_curv_around_097_100": [
+      90,
+      110
+    ]
+  },
+  "selected_config": "direct_vote_balanced",
+  "selected_thresholds": {
+    "R1": 0.55,
+    "R2": 0.55,
+    "R3": 0.55,
+    "R4": 0.75
+  },
+  "selected_patterns": "-+--,--+-,+++-",
+  "rule": "CNN branch probabilities are thresholded into 16 +/- morphology patterns; internal-only pattern set is locked and applied externally."
+}

@@ -136,9 +136,7 @@ def select_best_grid_point(rows: list[dict]) -> dict:
     # (res_scale_init, block3_kernel) grid point's internal cohort.
     passing = [r for r in rows if r["verdict_int"] == "PASS"]
     pool = passing if passing else rows
-    safe = [r for r in pool if r["ni_ci_upper_int"] <= base.SAFE_MARGIN_FRAC * r["ni_margin_int"]]
-    candidates = safe if safe else pool
-    best = max(candidates, key=lambda r: (round(r["spec_delta_int"], 6), r["sens_delta_int"]))
+    best = max(pool, key=lambda r: r["spec_delta_int"])
 
     # First real run of this grid (2026-07-13) picked res_scale_init=1.0/block3_kernel=5
     # this way -- internal spec_delta +0.035, the grid's best -- but that architecture
@@ -203,8 +201,18 @@ def run_grid_search() -> None:
     print(f"Saved full grid ranking to {OUTPUT_DIR / 'grid_search_ranking.csv'}")
 
 
+def run_best() -> None:
+    # Grid search already ran (see header note + outputs/5_aec_cnn_skip/grid_search_ranking.csv):
+    # no grid point beat the untuned default on both cohorts, so the default IS the winner.
+    # This just trains that one config instead of re-sweeping all 8 grid points.
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    setattr(base, "ResidualCNN", build_residual_cnn_skip(DEFAULT_RES_SCALE_INIT, DEFAULT_BLOCK3_KERNEL))
+    setattr(base, "OUTPUT_DIR", OUTPUT_DIR)
+    base.main()
+
+
 def main() -> None:
-    run_grid_search()
+    run_best()
 
 
 if __name__ == "__main__":

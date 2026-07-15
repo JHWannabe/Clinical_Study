@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # Standalone 4-stage AEC low-SMI pipeline (run: python code/run_from_raw_standalone.py).
-# Inputs: data/g1090.xlsx, data/sdata.xlsx. All helper modules are inlined (no aec_*.py
+# Inputs: data/gangnam.xlsx, data/sinchon.xlsx. All helper modules are inlined (no aec_*.py
 # deps); per-module globals are prefixed (COND_, LOCK_, ...) to avoid name collisions.
 # Stages: LOCK_main (lock features) -> PATTERN_main (CNN branch probs) ->
 # BOOST_main (AEC scores) -> FINAL_main (phenotype enrichment). All thresholds are
@@ -50,14 +50,14 @@ warnings.filterwarnings("ignore", message="All-NaN (slice|axis) encountered")
 
 # CONFIG: paths derived from this script's location so the project is portable.
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "run_from_raw_standalone"
 DRY_RUN = False
 
-FILES = {"g1090": DATA_DIR / "g1090.xlsx", "sdata": DATA_DIR / "sdata.xlsx"}
-INTERNAL_XLSX = DATA_DIR / "g1090.xlsx"
-EXTERNAL_XLSX = DATA_DIR / "sdata.xlsx"
+FILES = {"gangnam": DATA_DIR / "gangnam.xlsx", "sinchon": DATA_DIR / "sinchon.xlsx"}
+INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
+EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
 
 LOCK_OUT_DIR = OUTPUT_ROOT / "aec_lock_smoothed_deesc_gate"
 LOCK_DIR = LOCK_OUT_DIR
@@ -327,6 +327,21 @@ TOP_FEATURES_FOR_COMBO = 18
 MAX_COMBO_M = 4
 MAX_FEATURES_SCREEN = 600
 
+# Formal non-inferiority margin the rendered clinical_vs_aec_assisted_table.png judges
+# this gate against (Clopper-Pearson one-sided 95% CI on sensitivity loss <= margin,
+# same test used for the other pipeline -- see code/past/render_clinical_vs_aec_tables.py).
+# Locking now enforces this directly at S90 (the operating point shown in the table) so
+# the reported PASS/FAIL reflects the actual locking criterion, not a looser proxy.
+FORMAL_NI_MARGIN = 0.05
+FORMAL_NI_OP = "S90"
+
+def clopper_pearson_one_sided_upper(k: int, n: int, alpha: float = 0.05) -> float:
+    if n <= 0:
+        return float("nan")
+    if k == 0:
+        return float(1 - alpha ** (1 / n))
+    return float(stats.beta.ppf(1 - alpha, k + 1, n - k))
+
 def LOCK_row_norm(x: np.ndarray) -> np.ndarray:
     m = np.nanmean(x, axis=1, keepdims=True)
     m[~np.isfinite(m) | (m == 0)] = 1.0
@@ -575,7 +590,7 @@ def feature_screen(y: np.ndarray, clinical_z: np.ndarray, x: np.ndarray, names: 
                     th = thresholds[op]
                     cpos = clinical_z >= th
                     deesc = make_single_deesc(clinical_z, z, th, width, lam)
-                    metrics.append(deesc_metric_row("g1090_internal", "single", name, op, y, cpos, deesc))
+                    metrics.append(deesc_metric_row("gangnam_internal", "single", name, op, y, cpos, deesc))
                 s = LOCK_summarize_internal(metrics, {op for op, _ in OPS})
                 fail = s["min_p_loss"] < 0.05 or s["min_spec_gain"] <= 0 or s["max_fisher_p"] >= 0.05 or s["min_deesc_n"] < 25 or s["max_sens_loss"] > 0.08
                 score = 2.5 * s["min_spec_gain"] + 1.0 * s["mean_spec_gain"] + 0.8 * s["min_ba_delta"] - 0.45 * s["max_sens_loss"] - 0.05 * np.nan_to_num(eta, nan=0.0)
@@ -675,18 +690,22 @@ def combo_search(selected: pd.DataFrame, votes: dict, cpos_by: dict, y_by: dict)
     summary_rows = []
     detail_rows = []
     n = len(selected)
+    total_internal_events = int(np.sum(y_by["gangnam_internal"]))
     for m in range(1, min(MAX_COMBO_M, n) + 1):
         k_values = [1] if m == 1 else [k for k in range((m + 1) // 2, m + 1)]
         for subset in itertools.combinations(range(n), m):
             for k in k_values:
-                rows = evaluate_rule(selected, subset, k, votes, cpos_by, y_by, ["g1090_internal"])
+                rows = evaluate_rule(selected, subset, k, votes, cpos_by, y_by, ["gangnam_internal"])
                 s = LOCK_summarize_internal(rows, {op for op, _ in OPS})
-                survives = s["min_p_loss"] >= 0.05 and s["min_spec_gain"] > 0 and s["max_fisher_p"] < 0.05 and s["min_deesc_n"] >= 25 and s["max_sens_loss"] <= 0.08
+                s90_row = next(r for r in rows if r["operating_point"] == FORMAL_NI_OP)
+                formal_ni_upper = clopper_pearson_one_sided_upper(int(s90_row["tp_lost"]), total_internal_events)
+                formal_ni_pass = formal_ni_upper <= FORMAL_NI_MARGIN
+                survives = s["min_p_loss"] >= 0.05 and s["min_spec_gain"] > 0 and s["max_fisher_p"] < 0.05 and s["min_deesc_n"] >= 25 and s["max_sens_loss"] <= 0.08 and formal_ni_pass
                 mean_eta = float(np.nanmean(selected.iloc[list(subset)]["company_eta2"]))
                 score = 3.0 * s["min_spec_gain"] + 1.3 * s["mean_spec_gain"] + 0.8 * s["min_ba_delta"] - 0.6 * s["max_sens_loss"] - 0.04 * mean_eta + 0.01 * min(m, 3)
                 if not survives:
                     score -= 10.0
-                summary = {"rule": f"{k}-of-{m}", "m": m, "k": k, "subset_indices": "|".join(map(str, subset)), "features": " + ".join(selected.iloc[list(subset)]["feature"].astype(str).tolist()), "mean_company_eta2": mean_eta, "survives_internal_constraints": survives, "lock_selection_score": score, **{f"internal_{kk}": vv for kk, vv in s.items()}}
+                summary = {"rule": f"{k}-of-{m}", "m": m, "k": k, "subset_indices": "|".join(map(str, subset)), "features": " + ".join(selected.iloc[list(subset)]["feature"].astype(str).tolist()), "mean_company_eta2": mean_eta, "internal_S90_tp_lost": int(s90_row["tp_lost"]), "internal_S90_formal_ni_upper": formal_ni_upper, "internal_S90_formal_ni_pass": formal_ni_pass, "survives_internal_constraints": survives, "lock_selection_score": score, **{f"internal_{kk}": vv for kk, vv in s.items()}}
                 summary_rows.append(summary)
                 if survives and score > 0:
                     for r in rows:
@@ -759,10 +778,10 @@ def locked_score_auc_table(g: dict, s: dict, clinical_oof: np.ndarray, clinical_
 
 def plot_locked(details: pd.DataFrame, path: Path) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 8.4), constrained_layout=True)
-    colors = {"g1090_internal": "#2F6B9A", "sdata_external": "#C54E2C"}
+    colors = {"gangnam_internal": "#2F6B9A", "sinchon_external": "#C54E2C"}
     x = np.arange(len(OPS))
     labels = [op for op, _ in OPS]
-    for dataset, ax in zip(["g1090_internal", "sdata_external"], axes[0]):
+    for dataset, ax in zip(["gangnam_internal", "sinchon_external"], axes[0]):
         sub = details[details["dataset"].eq(dataset)].set_index("operating_point").loc[labels].reset_index()
         ax.plot(x, sub["clinical_specificity"] * 100, marker="o", color="#999999", label="Clinical specificity")
         ax.plot(x, sub["post_specificity"] * 100, marker="o", color=colors[dataset], label="Post-gate specificity")
@@ -772,7 +791,7 @@ def plot_locked(details: pd.DataFrame, path: Path) -> None:
         ax.set_ylabel("Specificity (%)")
         ax.grid(alpha=0.25)
         ax.legend(frameon=False)
-    for dataset, ax in zip(["g1090_internal", "sdata_external"], axes[1]):
+    for dataset, ax in zip(["gangnam_internal", "sinchon_external"], axes[1]):
         sub = details[details["dataset"].eq(dataset)].set_index("operating_point").loc[labels].reset_index()
         ax.bar(x - 0.18, sub["specificity_gain"] * 100, width=0.34, color=colors[dataset], label="Specificity gain")
         ax.bar(x + 0.18, sub["sensitivity_loss"] * 100, width=0.34, color="#D95F02", label="Sensitivity loss")
@@ -789,8 +808,8 @@ def plot_locked(details: pd.DataFrame, path: Path) -> None:
 
 def LOCK_main() -> None:
     LOCK_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    g = LOCK_load_dataset(DATA_DIR / "g1090.xlsx")
-    s = LOCK_load_dataset(DATA_DIR / "sdata.xlsx")
+    g = LOCK_load_dataset(DATA_DIR / "gangnam.xlsx")
+    s = LOCK_load_dataset(DATA_DIR / "sinchon.xlsx")
     clinical_oof, clinical_ext, c_g, c_s, thresholds = clinical_scores(g, s)
 
     fg = build_candidate_bank(g["norm"])
@@ -811,9 +830,9 @@ def LOCK_main() -> None:
     selected = diverse_combo_pool(screen, xg_risk, TOP_FEATURES_FOR_COMBO)
     selected.to_csv(LOCK_OUT_DIR / "internal_combo_feature_pool.csv", index=False)
 
-    y_by = {"g1090_internal": g["y"].astype(int), "sdata_external": s["y"].astype(int)}
-    c_by = {"g1090_internal": c_g, "sdata_external": c_s}
-    x_by = {"g1090_internal": xg_risk, "sdata_external": xs_risk}
+    y_by = {"gangnam_internal": g["y"].astype(int), "sinchon_external": s["y"].astype(int)}
+    c_by = {"gangnam_internal": c_g, "sinchon_external": c_s}
+    x_by = {"gangnam_internal": xg_risk, "sinchon_external": xs_risk}
     votes, cpos_by = precompute_votes(selected, y_by, c_by, x_by, thresholds)
     combo_summary, combo_internal_details = combo_search(selected, votes, cpos_by, y_by)
     combo_summary.to_csv(LOCK_OUT_DIR / "internal_combo_search_summary.csv", index=False)
@@ -825,7 +844,7 @@ def LOCK_main() -> None:
     locked_row = locked.iloc[0]
     subset = tuple(int(v) for v in str(locked_row["subset_indices"]).split("|"))
     k = int(locked_row["k"])
-    locked_details = pd.DataFrame(evaluate_rule(selected, subset, k, votes, cpos_by, y_by, ["g1090_internal", "sdata_external"]))
+    locked_details = pd.DataFrame(evaluate_rule(selected, subset, k, votes, cpos_by, y_by, ["gangnam_internal", "sinchon_external"]))
     locked_details.to_csv(LOCK_OUT_DIR / "locked_gate_operating_point_details.csv", index=False)
 
     adj_rows = []
@@ -836,7 +855,7 @@ def LOCK_main() -> None:
         cpos = c_by[dataset] >= th
         votes_sum = votes[(dataset, op)][list(subset)].sum(axis=0)
         deesc = cpos & (votes_sum >= k)
-        meta = g["meta"] if dataset == "g1090_internal" else s["meta"]
+        meta = g["meta"] if dataset == "gangnam_internal" else s["meta"]
         adj = adjusted_p_for_row(y_by[dataset], c_by[dataset], cpos, deesc, meta["Manufacturer"].astype(str).to_numpy())
         adj_rows.append({"dataset": dataset, "operating_point": op, **adj})
     adjusted_df = pd.DataFrame(adj_rows)
@@ -852,12 +871,12 @@ def LOCK_main() -> None:
     summary = {
         "preprocessing": {"source_sheet": "aec_128", "smoothing": f"gaussian_filter1d sigma={SIGMA}, axis=1, mode=nearest", "normalization": "patient-wise mean normalization after smoothing", "raw_level_features_used": False},
         "selection": {
-            "derivation_dataset": "g1090 internal only",
-            "external_dataset": "sdata used only after lock",
+            "derivation_dataset": "gangnam internal only",
+            "external_dataset": "sinchon used only after lock",
             "operating_points": OPS,
             "single_feature_pool_size": int(len(selected)),
             "max_combo_m": MAX_COMBO_M,
-            "constraints": "min sensitivity-loss p >= 0.05, min specificity gain > 0, max de-escalated event Fisher p < 0.05, min de-escalated n >= 25, max sensitivity loss <= 8 percentage points",
+            "constraints": f"min sensitivity-loss p >= 0.05, min specificity gain > 0, max de-escalated event Fisher p < 0.05, min de-escalated n >= 25, max sensitivity loss <= 8 percentage points, formal NI at {FORMAL_NI_OP} (Clopper-Pearson one-sided 95% CI on internal sensitivity loss <= {FORMAL_NI_MARGIN * 100:.0f} percentage points)",
         },
         "locked_rule": locked_row.to_dict(),
         "locked_features": feature_rows[["feature", "width", "lambda", "company_eta2", "screen_score"]].to_dict(orient="records"),
@@ -1121,7 +1140,7 @@ def codes_from_prob(prob: np.ndarray, thresholds: np.ndarray) -> np.ndarray:
 
 def evaluate_pattern_gate(rule: str, pattern_mask: int, g: dict, s: dict, cpos_g: np.ndarray, cpos_s: np.ndarray, code_g: np.ndarray, code_s: np.ndarray) -> pd.DataFrame:
     rows = []
-    for dataset, d, cpos, code in [("g1090_internal", g, cpos_g, code_g), ("sdata_external", s, cpos_s, code_s)]:
+    for dataset, d, cpos, code in [("gangnam_internal", g, cpos_g, code_g), ("sinchon_external", s, cpos_s, code_s)]:
         for op_idx, (op, _) in enumerate(OPS):
             selected = np.isin(code[:, op_idx], [k for k in range(16) if pattern_mask & (1 << k)])
             deesc = cpos[:, op_idx] & selected
@@ -1129,7 +1148,7 @@ def evaluate_pattern_gate(rule: str, pattern_mask: int, g: dict, s: dict, cpos_g
     return pd.DataFrame(rows)
 
 def PATTERN_summarize_internal(detail: pd.DataFrame) -> dict:
-    gi = detail[detail["dataset"].eq("g1090_internal")]
+    gi = detail[detail["dataset"].eq("gangnam_internal")]
     return {
         "internal_min_p_loss": float(gi["sensitivity_loss_p_exact"].min(skipna=True)),
         "internal_max_sens_loss": float(gi["sensitivity_loss"].max(skipna=True)),
@@ -1217,7 +1236,7 @@ def threshold_vectors() -> list[np.ndarray]:
 
 def pattern_distribution_table(label: str, g: dict, s: dict, cpos_g: np.ndarray, cpos_s: np.ndarray, code_g: np.ndarray, code_s: np.ndarray) -> pd.DataFrame:
     rows = []
-    for dataset, d, cpos, code in [("g1090_internal", g, cpos_g, code_g), ("sdata_external", s, cpos_s, code_s)]:
+    for dataset, d, cpos, code in [("gangnam_internal", g, cpos_g, code_g), ("sinchon_external", s, cpos_s, code_s)]:
         y = d["y"].astype(bool)
         for op_idx, (op, _) in enumerate(OPS):
             cp = cpos[:, op_idx]
@@ -1292,7 +1311,7 @@ def plot_best(detail: pd.DataFrame, dist: pd.DataFrame, out_path: Path) -> None:
     detail_plot = detail.copy()
     detail_plot["plot_rule"] = np.where(detail_plot["rule"].eq("exact_locked_2of4"), "exact_locked_2of4", "pattern_gate")
     for rule in ["exact_locked_2of4", "pattern_gate"]:
-        for dataset, ls in [("g1090_internal", "-"), ("sdata_external", "--")]:
+        for dataset, ls in [("gangnam_internal", "-"), ("sinchon_external", "--")]:
             sub = detail_plot[detail_plot["plot_rule"].eq(rule) & detail_plot["dataset"].eq(dataset)].set_index("operating_point").loc[labels].reset_index()
             x = np.arange(len(labels))
             axes[0].plot(x, sub["specificity_gain"] * 100, marker="o", ls=ls, color=colors[rule], label=f"{rule} {dataset}")
@@ -1306,7 +1325,7 @@ def plot_best(detail: pd.DataFrame, dist: pd.DataFrame, out_path: Path) -> None:
         ax.grid(alpha=0.25)
         ax.legend(fontsize=7)
 
-    sub = dist[dist["dataset"].eq("sdata_external") & dist["operating_point"].eq("S85")].copy()
+    sub = dist[dist["dataset"].eq("sinchon_external") & dist["operating_point"].eq("S85")].copy()
     sub = sub.sort_values("n", ascending=False).head(8)
     axes[2].bar(np.arange(len(sub)), sub["event_rate"] * 100, color="#756bb1")
     axes[2].set_xticks(np.arange(len(sub)))
@@ -1320,8 +1339,8 @@ def plot_best(detail: pd.DataFrame, dist: pd.DataFrame, out_path: Path) -> None:
 def PATTERN_main() -> None:
     PATTERN_OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"device={DEVICE}", flush=True)
-    g = LOCK_load_dataset(DATA_DIR / "g1090.xlsx")
-    s = LOCK_load_dataset(DATA_DIR / "sdata.xlsx")
+    g = LOCK_load_dataset(DATA_DIR / "gangnam.xlsx")
+    s = LOCK_load_dataset(DATA_DIR / "sinchon.xlsx")
     clinical_oof, clinical_ext, c_g, c_s, thresholds = clinical_scores(g, s)
     feature_g, feature_s, _ = locked_targets(g, s, c_g)
     target_g, cpos_g = exact_feature_votes(g["y"], c_g, thresholds, feature_g)
@@ -1539,8 +1558,8 @@ def plot_summary(summary: pd.DataFrame, out_path: Path) -> None:
 
 def BOOST_main() -> None:
     BOOST_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    g = LOCK_load_dataset(DATA_DIR / "g1090.xlsx")
-    s = LOCK_load_dataset(DATA_DIR / "sdata.xlsx")
+    g = LOCK_load_dataset(DATA_DIR / "gangnam.xlsx")
+    s = LOCK_load_dataset(DATA_DIR / "sinchon.xlsx")
     clinical_oof, clinical_ext, c_g, c_s, thresholds = clinical_scores(g, s)
     data = np.load(PROB_PATH, allow_pickle=True)
     configs = [str(x) for x in data["configs"]]
@@ -1550,7 +1569,7 @@ def BOOST_main() -> None:
     base_s, _ = build_base_features(prob_s)
 
     rows = []
-    score_df = pd.DataFrame({"dataset": ["g1090_internal"] * len(g["y"]) + ["sdata_external"] * len(s["y"]), "row_index": list(range(len(g["y"]))) + list(range(len(s["y"]))), "y_low_smi": np.r_[g["y"], s["y"]], "clinical_score": np.r_[clinical_oof, clinical_ext], "clinical_z": np.r_[c_g, c_s]})
+    score_df = pd.DataFrame({"dataset": ["gangnam_internal"] * len(g["y"]) + ["sinchon_external"] * len(s["y"]), "row_index": list(range(len(g["y"]))) + list(range(len(s["y"]))), "y_low_smi": np.r_[g["y"], s["y"]], "clinical_score": np.r_[clinical_oof, clinical_ext], "clinical_z": np.r_[c_g, c_s]})
     cg_auc, cg_p = auc_p(g["y"], clinical_oof)
     cs_auc, cs_p = auc_p(s["y"], clinical_ext)
     rows.append({"model": "clinical_only", "feature_set": "clinical", "internal_auc": cg_auc, "internal_auc_p": cg_p, "external_auc": cs_auc, "external_auc_p": cs_p, "internal_delta_vs_clinical": 0.0, "internal_delta_p_bootstrap": np.nan, "external_delta_vs_clinical": 0.0, "external_delta_p_bootstrap": np.nan})
@@ -1565,8 +1584,8 @@ def BOOST_main() -> None:
         idel, idelp, _, _ = paired_delta_bootstrap(g["y"], score_g, clinical_oof, BOOST_SEED + len(rows))
         edel, edelp, _, _ = paired_delta_bootstrap(s["y"], score_s, clinical_ext, BOOST_SEED + 100 + len(rows))
         rows.append({"model": f"{name}_raw_low_smi_risk", "feature_set": "raw_direct_vote_score", "internal_auc": ig_auc, "internal_auc_p": ig_p, "external_auc": es_auc, "external_auc_p": es_p, "internal_delta_vs_clinical": idel, "internal_delta_p_bootstrap": idelp, "external_delta_vs_clinical": edel, "external_delta_p_bootstrap": edelp})
-        score_df.loc[score_df["dataset"].eq("g1090_internal"), f"{name}_raw_low_smi_risk"] = score_g
-        score_df.loc[score_df["dataset"].eq("sdata_external"), f"{name}_raw_low_smi_risk"] = score_s
+        score_df.loc[score_df["dataset"].eq("gangnam_internal"), f"{name}_raw_low_smi_risk"] = score_g
+        score_df.loc[score_df["dataset"].eq("sinchon_external"), f"{name}_raw_low_smi_risk"] = score_s
 
     for i, cand in enumerate(CANDIDATES):
         print(f"[{i + 1}/{len(CANDIDATES)}] {cand.name}", flush=True)
@@ -1595,15 +1614,15 @@ def BOOST_main() -> None:
                 "external_delta_ci_high": edhi,
             }
         )
-        score_df.loc[score_df["dataset"].eq("g1090_internal"), cand.name] = score_g
-        score_df.loc[score_df["dataset"].eq("sdata_external"), cand.name] = score_s
+        score_df.loc[score_df["dataset"].eq("gangnam_internal"), cand.name] = score_g
+        score_df.loc[score_df["dataset"].eq("sinchon_external"), cand.name] = score_s
 
     summary = pd.DataFrame(rows).sort_values(["external_auc", "internal_auc"], ascending=False).reset_index(drop=True)
     summary.to_csv(BOOST_OUT_DIR / "direct_vote_auc_boost_summary.csv", index=False)
     score_df.to_csv(BOOST_OUT_DIR / "direct_vote_auc_boost_scores.csv", index=False)
     plot_summary(summary, BOOST_OUT_DIR / "direct_vote_auc_boost_plot.png")
     with (BOOST_OUT_DIR / "direct_vote_auc_boost_summary.json").open("w", encoding="utf-8") as f:
-        json.dump({"source_probabilities": str(PROB_PATH), "input": "direct-vote CNN branch probabilities plus optional clinical score context", "validation": "internal g1090 cross-fitted OOF; external sdata held-out", "target": "low SMI", "note": "Exploratory AUC-max calibration. External AUC is the only relevant target for portability."}, f, indent=2)
+        json.dump({"source_probabilities": str(PROB_PATH), "input": "direct-vote CNN branch probabilities plus optional clinical score context", "validation": "internal gangnam cross-fitted OOF; external sinchon held-out", "target": "low SMI", "note": "Exploratory AUC-max calibration. External AUC is the only relevant target for portability."}, f, indent=2)
     show = summary[["model", "feature_set", "internal_auc", "internal_auc_p", "internal_delta_vs_clinical", "internal_delta_p_bootstrap", "external_auc", "external_auc_p", "external_delta_vs_clinical", "external_delta_p_bootstrap"]]
     print("\nDIRECT-VOTE AUC BOOST SUMMARY")
     print(show.to_string(index=False, float_format=lambda x: f"{x:.6g}"))
@@ -1669,7 +1688,7 @@ def load_metadata(path: Path, cohort: str) -> pd.DataFrame:
     return out
 
 def load_patient_table() -> pd.DataFrame:
-    meta = pd.concat([load_metadata(INTERNAL_XLSX, "g1090_internal"), load_metadata(EXTERNAL_XLSX, "sdata_external")], ignore_index=True)
+    meta = pd.concat([load_metadata(INTERNAL_XLSX, "gangnam_internal"), load_metadata(EXTERNAL_XLSX, "sinchon_external")], ignore_index=True)
     scores = pd.read_csv(DIRECT_VOTE_SCORE_CSV)
     if AEC_SCORE_COLUMN not in scores.columns:
         raise KeyError(f"{AEC_SCORE_COLUMN} not found in {DIRECT_VOTE_SCORE_CSV}")
@@ -1678,7 +1697,7 @@ def load_patient_table() -> pd.DataFrame:
     keep = ["cohort", "row_index", "low_smi", "clinical_score", "aec_score"]
     merged = meta.merge(scores[keep], on=["cohort", "row_index"], how="inner")
 
-    expected = {"g1090_internal": 1090, "sdata_external": 926}
+    expected = {"gangnam_internal": 1090, "sinchon_external": 926}
     observed = merged["cohort"].value_counts().to_dict()
     print(f"[INFO] merged patient counts: {observed}")
     for cohort, n in expected.items():
@@ -1747,7 +1766,7 @@ def add_global_flags(df: pd.DataFrame, q: float) -> tuple[pd.DataFrame, dict[str
     # All thresholds are locked from internal/Gangnam data only. Enrichment uses AEC-high/-low
     # within clinical-high (top/bottom q of AEC score among internal C+), not global AEC+.
     out = df.copy()
-    internal = out[out["cohort"].eq("g1090_internal")]
+    internal = out[out["cohort"].eq("gangnam_internal")]
 
     clinical_cut = float(np.quantile(internal["clinical_score"], 1.0 - q))
     internal_cpos = internal["clinical_score"] >= clinical_cut
@@ -1845,7 +1864,7 @@ def low_smi_subtype_tables(df: pd.DataFrame, q: float) -> tuple[pd.DataFrame, pd
 
 def plot_quintile_enrichment(enrich: pd.DataFrame, out_path: Path) -> None:
     q20 = enrich[np.isclose(enrich["q"], PRIMARY_Q)].copy()
-    cohorts = ["g1090_internal", "sdata_external"]
+    cohorts = ["gangnam_internal", "sinchon_external"]
     labels = ["Gangnam internal", "Sinchon external"]
     colors = ["#6B7280", "#4C78A8", "#D04F5B"]
 
@@ -1934,7 +1953,7 @@ CHECK_GREEN = "#1A7F37"
 CHECK_AMBER = "#B7791F"
 CHECK_RED = "#B42318"
 
-CHECK_REFERENCE = {"g1090_internal": {"label": "Gangnam / internal", "low_n": 8, "low_den": 44, "high_n": 26, "high_den": 44, "p": 7.79e-05}, "sdata_external": {"label": "Sinchon / external", "low_n": 12, "low_den": 54, "high_n": 41, "high_den": 69, "p": 2.96e-05}}
+CHECK_REFERENCE = {"gangnam_internal": {"label": "Gangnam / internal", "low_n": 8, "low_den": 44, "high_n": 26, "high_den": 44, "p": 7.79e-05}, "sinchon_external": {"label": "Sinchon / external", "low_n": 12, "low_den": 54, "high_n": 41, "high_den": 69, "p": 2.96e-05}}
 
 def CHECK_pct(n: int, den: int) -> str:
     return f"{n}/{den} = {n / den * 100:.1f}%" if den else "n/a"
@@ -2016,7 +2035,7 @@ def CHECK_main(enrich: pd.DataFrame) -> None:
 
     sections = []
     all_verdicts: list[str] = []
-    for cohort in ["g1090_internal", "sdata_external"]:
+    for cohort in ["gangnam_internal", "sinchon_external"]:
         ref = CHECK_REFERENCE[cohort]
         row = q20.loc[cohort]
         got_low_n, got_low_den = int(row["aec_low_low_smi_n"]), int(row["aec_low_n"])

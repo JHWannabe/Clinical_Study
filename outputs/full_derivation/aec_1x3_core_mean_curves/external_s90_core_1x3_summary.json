@@ -1,0 +1,90 @@
+{
+  "png": "C:\\Users\\jhjun\\OneDrive\\Desktop\\Clinical_Study\\outputs\\full_derivation\\aec_1x3_core_mean_curves\\external_s90_core_1x3_mean_curves.png",
+  "png_tangent": "C:\\Users\\jhjun\\OneDrive\\Desktop\\Clinical_Study\\outputs\\full_derivation\\aec_1x3_core_mean_curves\\external_s90_core_1x3_mean_curves_with_r4_tangent.png",
+  "png_2x3": "C:\\Users\\jhjun\\OneDrive\\Desktop\\Clinical_Study\\outputs\\full_derivation\\aec_1x3_core_mean_curves\\external_s90_core_2x3_mean_and_mirror_deviation.png",
+  "external_dataset": "sinchon",
+  "clinical_operating_point": "S90",
+  "AEC_definition": "primary interpretable morphology gate new4_combo_261089; AEC+ means de-escalation/low-risk morphology",
+  "selected_patterns": [
+    "++++",
+    "++--",
+    "+--+",
+    "--+-",
+    "---+"
+  ],
+  "branches": [
+    {
+      "region": "R1",
+      "feature": "R1_045_056__endpoint_delta",
+      "sign": -1,
+      "width": 0.5,
+      "lambda": 0.25,
+      "external_vote_positive_n": 387
+    },
+    {
+      "region": "R2",
+      "feature": "R2_057_080__level_mean",
+      "sign": -1,
+      "width": 0.7,
+      "lambda": 0.25,
+      "external_vote_positive_n": 393
+    },
+    {
+      "region": "R3",
+      "feature": "R3_097_128__linear_slope",
+      "sign": 1,
+      "width": 0.35,
+      "lambda": 0.25,
+      "external_vote_positive_n": 338
+    },
+    {
+      "region": "R4",
+      "feature": "R4_117_128__endpoint_delta",
+      "sign": -1,
+      "width": 0.5,
+      "lambda": 0.25,
+      "external_vote_positive_n": 450
+    }
+  ],
+  "low_smi_conditional": {
+    "clinical_pos_aec_pos_events": 2,
+    "clinical_pos_aec_pos_n": 56,
+    "clinical_pos_aec_pos_rate": 0.03571428571428571,
+    "clinical_pos_aec_neg_events": 129,
+    "clinical_pos_aec_neg_n": 480,
+    "clinical_pos_aec_neg_rate": 0.26875,
+    "fisher_p": 2.3049584728890404e-05
+  },
+  "summary": [
+    {
+      "comparison": "Clinical + vs Clinical -",
+      "n_group1": 536,
+      "n_group2": 390,
+      "mean_abs_between_group_difference": 0.01872219171550656,
+      "R1_group1_minus_group2": -0.009510245162635536,
+      "R2_group1_minus_group2": -0.034544757233822145,
+      "R3_group1_minus_group2": 0.01839871839838687,
+      "R4_group1_minus_group2": 0.013592970692919787
+    },
+    {
+      "comparison": "Low SMI + vs Non-low SMI",
+      "n_group1": 141,
+      "n_group2": 785,
+      "mean_abs_between_group_difference": 0.02284195021980797,
+      "R1_group1_minus_group2": -0.026147802344751114,
+      "R2_group1_minus_group2": -0.00833223274910895,
+      "R3_group1_minus_group2": 0.037676689699161076,
+      "R4_group1_minus_group2": 0.03155987925761394
+    },
+    {
+      "comparison": "Clinical+/AEC- vs Clinical+/AEC+",
+      "n_group1": 480,
+      "n_group2": 56,
+      "mean_abs_between_group_difference": 0.011748458037147521,
+      "R1_group1_minus_group2": -0.0037015953418269667,
+      "R2_group1_minus_group2": -0.006726388469341649,
+      "R3_group1_minus_group2": 0.02175111234109206,
+      "R4_group1_minus_group2": 0.03000140662579671
+    }
+  ]
+}

@@ -292,27 +292,10 @@ SWEEP_CONFIGS = [
     {"use_clinical": False, "use_stage1_score": True},   # curve + stage1 score only (no raw clinical)
 ]
 
-# A config's internal spec_delta is only trusted for ranking if its non-inferiority
-# CI still has real headroom left: SAFE_MARGIN_FRAC=0.8 means the 97.5% CI upper bound
-# on the sensitivity drop must stay within 80% of the allowed margin (SENS_NONINF_MARGIN).
-# A config sitting right at the boundary (e.g. ci_upper/margin ~0.98) is one unlucky
-# external sample away from failing non-inferiority outright, even though its internal
-# point estimate says PASS -- see docs/cnn_variant_comparison.md's FiLM writeup for a
-# case where this happened. Configs are still ranked by spec_delta within whichever
-# pool (safe, or -- if none are safe -- everyone) survives the filter.
-SAFE_MARGIN_FRAC = 0.8
-
-
 def select_best_sweep_config(sweep_state: dict) -> dict:
     passing = [s for s in sweep_state.values() if s["ok"]]
     pool = passing if passing else list(sweep_state.values())
-    safe = [s for s in pool if s["ni_ci_upper"] <= SAFE_MARGIN_FRAC * s["margin"]]
-    candidates = safe if safe else pool
-    # Tie-break on exact spec_delta ties: prefer the config with more information
-    # (stage1 score included) over discarding it, then the smaller sensitivity drop.
-    return max(candidates, key=lambda s: (round(s["spec_delta"], 6),
-                                           s["cfg"]["use_stage1_score"],
-                                           s["sens_delta"]))
+    return max(pool, key=lambda s: s["spec_delta"])
 
 
 def main() -> None:
@@ -430,11 +413,9 @@ def main() -> None:
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 12.5))
     residual.plot_confusion_matrix(axes[0, 0], baseline_int, "Internal: Stage-1 only (OOF)")
-    residual.plot_confusion_matrix(axes[0, 1], combined_int, "Internal: Stage-1+Stage-2 CNN (OOF)",
-                                    baseline_res=baseline_int, mcnemar_res=mcnemar_int, ni_res=ni_int)
+    residual.plot_confusion_matrix(axes[0, 1], combined_int, "Internal: Stage-1+Stage-2 CNN (OOF)")
     residual.plot_confusion_matrix(axes[1, 0], baseline_ext, "External: Stage-1 only (frozen)")
-    residual.plot_confusion_matrix(axes[1, 1], combined_ext, "External: Stage-1+Stage-2 CNN (frozen)",
-                                    baseline_res=baseline_ext, mcnemar_res=mcnemar_ext, ni_res=ni_ext)
+    residual.plot_confusion_matrix(axes[1, 1], combined_ext, "External: Stage-1+Stage-2 CNN (frozen)")
     fig.suptitle("Stage-2 reclassification of screen-positives (clinical + AEC residual 1D-CNN)",
                  fontsize=13, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
@@ -482,12 +463,14 @@ def main() -> None:
          "sens_clin": baseline_int["sens"], "spec_clin": baseline_int["spec"], "acc_clin": baseline_int["acc"],
          "sens_aec": combined_int["sens"], "spec_aec": combined_int["spec"], "acc_aec": combined_int["acc"],
          "sens_p": mcnemar_int["sens_p"], "spec_p": mcnemar_int["spec_p"], "acc_p": acc_p_int,
-         "net_nri": net_nri_int},
+         "net_nri": net_nri_int,
+         "ni_margin": ni_int["margin"], "ni_ci_upper": ni_int["ci_upper"], "ni_pass": ni_int["noninferior"]},
         {"cohort": "external", "n": len(y_ext), "event": int(y_ext.sum()), "auc": auc_ext,
          "sens_clin": baseline_ext["sens"], "spec_clin": baseline_ext["spec"], "acc_clin": baseline_ext["acc"],
          "sens_aec": combined_ext["sens"], "spec_aec": combined_ext["spec"], "acc_aec": combined_ext["acc"],
          "sens_p": mcnemar_ext["sens_p"], "spec_p": mcnemar_ext["spec_p"], "acc_p": acc_p_ext,
-         "net_nri": net_nri_ext},
+         "net_nri": net_nri_ext,
+         "ni_margin": ni_ext["margin"], "ni_ci_upper": ni_ext["ci_upper"], "ni_pass": ni_ext["noninferior"]},
     ]
     table_path = OUTPUT_DIR / "clinical_vs_aec_assisted_table.png"
     residual.plot_clinical_vs_aec_table(table_rows, table_path,

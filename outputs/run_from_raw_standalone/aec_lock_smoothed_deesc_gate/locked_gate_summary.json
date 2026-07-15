@@ -1,0 +1,89 @@
+{
+  "preprocessing": {
+    "source_sheet": "aec_128",
+    "smoothing": "gaussian_filter1d sigma=1.0, axis=1, mode=nearest",
+    "normalization": "patient-wise mean normalization after smoothing",
+    "raw_level_features_used": false
+  },
+  "selection": {
+    "derivation_dataset": "gangnam internal only",
+    "external_dataset": "sinchon used only after lock",
+    "operating_points": [
+      [
+        "S80",
+        0.8
+      ],
+      [
+        "S82.5",
+        0.825
+      ],
+      [
+        "S85",
+        0.85
+      ],
+      [
+        "S87.5",
+        0.875
+      ],
+      [
+        "S90",
+        0.9
+      ]
+    ],
+    "single_feature_pool_size": 18,
+    "max_combo_m": 4,
+    "constraints": "min sensitivity-loss p >= 0.05, min specificity gain > 0, max de-escalated event Fisher p < 0.05, min de-escalated n >= 25, max sensitivity loss <= 8 percentage points, formal NI at S90 (Clopper-Pearson one-sided 95% CI on internal sensitivity loss <= 5 percentage points)"
+  },
+  "locked_rule": {
+    "rule": "2-of-4",
+    "m": 4,
+    "k": 2,
+    "subset_indices": "0|6|15|17",
+    "features": "smooth_norm__norm_slope_082_085_sd + smooth_visual__visual_norm_curv_103_120_sd + smooth_visual__visual_norm_abs_slope_094_103_max + smooth_norm__norm_haar_b02_111_114",
+    "mean_company_eta2": 0.22403965708391574,
+    "internal_S90_tp_lost": 2,
+    "internal_S90_formal_ni_upper": 0.047998304847133924,
+    "internal_S90_formal_ni_pass": true,
+    "survives_internal_constraints": true,
+    "lock_selection_score": 0.33208101307616056,
+    "internal_min_p_loss": 0.0625,
+    "internal_max_sens_loss": 0.03875968992248069,
+    "internal_min_spec_gain": 0.07284079084287198,
+    "internal_mean_spec_gain": 0.07825182101977106,
+    "internal_min_ba_delta": 0.017560841823359152,
+    "internal_mean_ba_delta": 0.02439722833934286,
+    "internal_max_fisher_p": 2.8081555374488637e-05,
+    "internal_min_deesc_n": 74,
+    "internal_mean_deesc_event_rate": 0.04886469563351642
+  },
+  "locked_features": [
+    {
+      "feature": "smooth_norm__norm_slope_082_085_sd",
+      "width": 0.7,
+      "lambda": 0.7,
+      "company_eta2": 0.10873871060692694,
+      "screen_score": 0.27472867038726206
+    },
+    {
+      "feature": "smooth_visual__visual_norm_curv_103_120_sd",
+      "width": 0.5,
+      "lambda": 0.55,
+      "company_eta2": 0.5678502951727138,
+      "screen_score": 0.20869296628904543
+    },
+    {
+      "feature": "smooth_visual__visual_norm_abs_slope_094_103_max",
+      "width": 0.7,
+      "lambda": 0.4,
+      "company_eta2": 0.18044011662286707,
+      "screen_score": 0.16209053036742244
+    },
+    {
+      "feature": "smooth_norm__norm_haar_b02_111_114",
+      "width": 0.7,
+      "lambda": 0.4,
+      "company_eta2": 0.039129505933155145,
+      "screen_score": 0.1595952029454834
+    }
+  ]
+}
