@@ -14,6 +14,7 @@ from matplotlib.axes import Axes
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -21,7 +22,7 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0_clinic-only_baseline"
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
-TARGET_SENSITIVITY = 0.90
+TARGET_SENSITIVITIES = [0.85, 0.90, 0.95]
 N_FOLDS = 5
 SEED = 20260709
 
@@ -34,29 +35,19 @@ def load_cohort(xlsx_path: Path) -> tuple[pd.DataFrame, np.ndarray]:
     return meta, y
 
 
-def load_internal(xlsx_path: Path = INTERNAL_XLSX) -> tuple[pd.DataFrame, np.ndarray]:
-    return load_cohort(xlsx_path)
-
-
-def load_external(xlsx_path: Path = EXTERNAL_XLSX) -> tuple[pd.DataFrame, np.ndarray]:
-    return load_cohort(xlsx_path)
-
-
 def raw_clinical_matrix(meta: pd.DataFrame) -> np.ndarray:
-    age = pd.to_numeric(meta["PatientAge"], errors="coerce").to_numpy(dtype=float)
+    age = pd.to_numeric(meta["PatientAge"], errors="coerce").to_numpy(dtype=int)
     height = pd.to_numeric(meta["Height"], errors="coerce").to_numpy(dtype=float)
     weight = pd.to_numeric(meta["Weight"], errors="coerce").to_numpy(dtype=float)
-    sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float)
+    sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(int)
     return np.column_stack([age, height, weight, sex_m])
 
 
 def fit_clinical_standardizer(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     med = np.nanmedian(x, axis=0)
     x = np.where(np.isfinite(x), x, med)
-    mu = x.mean(axis=0)
-    sd = x.std(axis=0)
-    sd[sd == 0] = 1.0
-    return med, mu, sd
+    scaler = StandardScaler().fit(x)
+    return med, np.asarray(scaler.mean_), np.asarray(scaler.scale_)
 
 
 def apply_clinical_standardizer(x: np.ndarray, med: np.ndarray, mu: np.ndarray, sd: np.ndarray) -> np.ndarray:
@@ -132,39 +123,91 @@ def plot_confusion_matrix(ax: Axes, result: dict) -> None:
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["Actual Positive", "Actual Negative"])
     label = "internal, OOF" if result["cohort"] == "internal" else "external, frozen internal model"
-    ax.set_title(f"{label}\nThreshold @ Sensitivity>={TARGET_SENSITIVITY:.0%} (th={result['th']:.3f})", fontsize=11, fontweight="bold")
+    ax.set_title(f"{label}\nThreshold @ Sensitivity>={result['target']:.0%} (th={result['th']:.3f})", fontsize=11, fontweight="bold")
+
+
+def plot_comparison_summary(results: list[dict], out_path: Path) -> None:
+    metrics = ["sens", "spec", "ppv", "npv"]
+    metric_labels = ["Sensitivity", "Specificity", "PPV", "NPV"]
+    cohorts = ["internal", "external"]
+    targets = sorted({r["target"] for r in results})
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
+    width = 0.2
+    x = np.arange(len(metrics))
+    for ax, cohort in zip(axes, cohorts):
+        for i, target in enumerate(targets):
+            result = next(r for r in results if r["cohort"] == cohort and r["target"] == target)
+            values = [result[m] for m in metrics]
+            ax.bar(x + (i - (len(targets) - 1) / 2) * width, values, width, label=f"S{target:.0%}")
+        ax.set_xticks(x)
+        ax.set_xticklabels(metric_labels)
+        ax.set_ylim(0, 1.05)
+        ax.set_title(cohort)
+        ax.grid(axis="y", alpha=0.3)
+    axes[0].set_ylabel("Value")
+    axes[1].legend(title="Sensitivity target", loc="lower right")
+    fig.suptitle("Clinical-only Logistic Regression: S85 vs S90 vs S95", fontsize=13, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(out_path, dpi=220)
+    plt.close(fig)
 
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # --- internal: fit standardizer + threshold via 5-fold OOF on internal only ---
-    meta_int, y_int = load_internal()
+    # --- internal: fit standardizer once on internal only ---
+    meta_int, y_int = load_cohort(INTERNAL_XLSX)
     x_raw_int = raw_clinical_matrix(meta_int)
     med, mu, sd = fit_clinical_standardizer(x_raw_int)
     x_int = apply_clinical_standardizer(x_raw_int, med, mu, sd)
-
     oof = oof_scores(x_int, y_int)
-    th = threshold_for_sensitivity(y_int, oof, TARGET_SENSITIVITY)
-    result_int = evaluate("internal", y_int, oof >= th, th)
 
-    # --- external: pure test set, scored by the model trained on all of internal ---
     model = fit_baseline_model(x_int, y_int)
-    meta_ext, y_ext = load_external()
+    meta_ext, y_ext = load_cohort(EXTERNAL_XLSX)
     x_ext = apply_clinical_standardizer(raw_clinical_matrix(meta_ext), med, mu, sd)
     score_ext = model.decision_function(x_ext)
-    result_ext = evaluate("external", y_ext, score_ext >= th, th)
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
-    fig.suptitle("Clinical-only Logistic Regression", fontsize=13, fontweight="bold")
-    plot_confusion_matrix(axes[0], result_int)
-    plot_confusion_matrix(axes[1], result_ext)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
-    out_path = OUTPUT_DIR / "clinical_only_confusion_matrix_sens90.png"
-    fig.savefig(out_path, dpi=220)
-    plt.close(fig)
+    all_results = []
+    summary_rows = []
+    for target in TARGET_SENSITIVITIES:
+        th = threshold_for_sensitivity(y_int, oof, target)
+        result_int = evaluate("internal", y_int, oof >= th, th)
+        result_ext = evaluate("external", y_ext, score_ext >= th, th)
+        result_int["target"] = target
+        result_ext["target"] = target
+        all_results.extend([result_int, result_ext])
 
-    print(f"Saved confusion matrix to {out_path}")
+        fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
+        fig.suptitle(f"Clinical-only Logistic Regression (S{target:.0%})", fontsize=13, fontweight="bold")
+        plot_confusion_matrix(axes[0], result_int)
+        plot_confusion_matrix(axes[1], result_ext)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        out_path = OUTPUT_DIR / f"clinical_only_confusion_matrix_sens{int(target * 100)}.png"
+        fig.savefig(out_path, dpi=220)
+        plt.close(fig)
+        print(f"Saved confusion matrix to {out_path}")
+
+        for result in (result_int, result_ext):
+            summary_rows.append({
+                "target_sensitivity": target,
+                "cohort": result["cohort"],
+                "threshold": result["th"],
+                "sensitivity": result["sens"],
+                "specificity": result["spec"],
+                "ppv": result["ppv"],
+                "npv": result["npv"],
+                "n": int(result["matrix"].sum()),
+            })
+
+    summary_df = pd.DataFrame(summary_rows)
+    summary_path = OUTPUT_DIR / "clinical_only_sensitivity_comparison.csv"
+    summary_df.to_csv(summary_path, index=False)
+    print(f"Saved comparison table to {summary_path}")
+
+    comparison_fig_path = OUTPUT_DIR / "clinical_only_sensitivity_comparison.png"
+    plot_comparison_summary(all_results, comparison_fig_path)
+    print(f"Saved comparison figure to {comparison_fig_path}")
 
 
 if __name__ == "__main__":

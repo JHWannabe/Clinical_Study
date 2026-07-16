@@ -53,6 +53,30 @@ def main():
 각 스크립트 상단 주석에 왜 그 변경이 도움이 될 것으로 기대하는지, baseline의 어떤 한계를
 겨냥한 것인지 근거가 적혀 있다.
 
+### 2-1. 공통 입력 표현(AEC-128 잔차 곡선) 관련 참고 문헌
+
+위 표(2절)의 "참고 논문"은 7개 변형이 각자 바꾼 **한 조각**(아키텍처/학습 절차)에 대한
+근거다. 그와 별개로, 7개 변형 전부와 baseline이 **공유하는 입력 표현** — "AEC-128 곡선을
+표준화된 임상 변수로 선형회귀해 잔차만 남기고, 그 잔차 곡선(128차원 전체, point-wise가
+아니라 곡선 단위)을 다운스트림 모델에 넣는다"(4.2절, [residual_reclassify_cnn_algorithm.md](residual_reclassify_cnn_algorithm.md#42-aec-128-곡선-전처리-및-잔차화)) —
+자체에도 대응하는 문헌이 있다. AEC 곡선을 직접 다룬 선행연구는 찾지 못했으나(AEC는 CT
+장비의 선량 변조 신호라 이 용도로 잔차화해 재분류에 쓴 사례가 드물다), 같은 발상 —
+**covariate를 회귀로 제거한 잔차(residual/gap)를 그 자체로 다운스트림 신호로 쓰는 것** —
+을 다른 1D 신호·다른 도메인에 적용한 연구는 여럿이다.
+
+| 주제 | 이 프로젝트와의 대응 | 참고 논문 (원조) | 참고 논문 (최신) |
+| --- | --- | --- | --- |
+| Covariate를 선형회귀로 제거한 뒤 잔차만 다운스트림 모델 입력으로 쓰는 "linear residualization" | 4.2절 2단계 — 표준화된 임상 변수(나이·키·몸무게·성별)로 정규화 곡선을 선형회귀 예측하고 실제-예측 잔차만 CNN에 입력 | Snoek, Miletić & Scholte, 2019, [How to Control for Confounds in Decoding Analyses of Neuroimaging Data (NeuroImage 184, 741–760)](https://doi.org/10.1016/j.neuroimage.2018.10.024) | Chaibub Neto, 2021, [Causality-Aware Counterfactual Confounding Adjustment as an Alternative to Linear Residualization in Anticausal Prediction Tasks Based on Linear Learners (arXiv:2011.04605, ICML 2021)](https://arxiv.org/abs/2011.04605) |
+| Covariate 예측과의 잔차(gap)를 그 자체로 다운스트림 분류·위험도 예측의 신호(biomarker)로 쓰는 접근 — "AEC 곡선에서 임상변수로 설명 안 되는 부분"이라는 이 프로젝트의 4.1절 문구와 같은 구조 | 4.1절 목적 — "임상 변수로 설명되지 않는 잔차 정보"를 재분류 신호로 사용 | Cole et al., 2017, [Predicting Brain Age with Deep Learning from Raw Imaging Data Results in a Reliable and Heritable Biomarker (NeuroImage 163, 115–124)](https://doi.org/10.1016/j.neuroimage.2017.07.059) | Brain Age Residual Biomarker (BARB) 연구, 2025, [Leveraging MRI-Based Models to Detect Latent Health Conditions in U.S. Veterans (arXiv:2501.05970)](https://arxiv.org/abs/2501.05970) |
+| Covariate로 조정한 잔차를 point가 아니라 **곡선(functional data) 단위**로 다루는 연구 — AEC가 아닌 다른 1D 신호(구조물 센서)에도 같은 발상이 쓰인 사례 | 4.2절 3단계 — 잔차 128차원을 point-wise가 아니라 곡선 전체 단위로 표준화·CNN 입력 | Li, Chiou & Shyr, 2017, [Functional Data Classification Using Covariate-Adjusted Subspace Projection (Computational Statistics & Data Analysis 115, 21–34)](https://doi.org/10.1016/j.csda.2017.05.007) | Covariate-Adjusted Functional Data Analysis for Structural Health Monitoring, 2024, [arXiv:2408.02106 (Data-Centric Engineering)](https://arxiv.org/abs/2408.02106) |
+| AEC가 아닌 다른 1D 신호에 쓰이는 대안적 전처리(스케일/베이스라인 보정) — 4.2절 1단계("환자 평균으로 나누어 정규화")와 다른 방식으로 1D 신호를 정규화하는 표준 기법들 | 4.2절 1단계의 대안이 될 수 있는 스펙트럼/시계열 표준 전처리(평활화, 산란/베이스라인 보정) | Savitzky & Golay, 1964, [Smoothing and Differentiation of Data by Simplified Least Squares Procedures (Analytical Chemistry 36(8), 1627–1639)](https://doi.org/10.1021/ac60214a047); Barnes, Dhanoa & Lister, 1989, [Standard Normal Variate Transformation and De-Trending of Near-Infrared Diffuse Reflectance Spectra (Applied Spectroscopy 43(5), 772–777)](https://doi.org/10.1366/0003702894202201) | Yan, 2025, [A Review on Spectral Data Preprocessing Techniques for Machine Learning and Quantitative Analysis (iScience 28(7), 112759)](https://doi.org/10.1016/j.isci.2025.112759) |
+| BMI 교란(Simpson's paradox) 제거의 통계적 근거 — 이 프로젝트가 4.2절에서 "BMI에 의한 Simpson's paradox식 교란 제거"라고 직접 언급한 부분의 원 논문/해설 | 4.2절 2단계의 동기 — clinical 변수로 잔차화하지 않으면 BMI가 곡선-라벨 관계를 왜곡할 수 있다는 근거 | Simpson, 1951, [The Interpretation of Interaction in Contingency Tables (JRSS B 13(2), 238–241)](https://doi.org/10.1111/j.2517-6161.1951.tb00088.x) | Norton & Divine, 2015, [Simpson's Paradox … and How to Avoid It (Significance 12(4), 40–43)](https://doi.org/10.1111/j.1740-9713.2015.00844.x) |
+
+캐비어트: AEC(자동노출제어) 곡선 자체를 이런 방식으로 잔차화해 재분류에 쓴 선행연구는
+찾지 못했다 — 위 표는 "이 프로젝트가 쓰는 방법론(covariate 잔차화, 곡선 단위 처리, 잔차를
+바이오마커로 쓰는 것)이 다른 도메인에서 어떻게 검증됐는지"를 보여주는 유사 사례이지, AEC
+데이터에 대한 직접적인 선행연구는 아니다.
+
 ### 4. `4_aec_cnn_pretrain.py` — 비지도 사전학습
 
 Stage-2 CNN은 screen-positive 환자만 학습에 쓰지만(내부 ~560명), 잔차 곡선 자체는 내부
