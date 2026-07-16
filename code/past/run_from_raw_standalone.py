@@ -52,7 +52,7 @@ warnings.filterwarnings("ignore", message="All-NaN (slice|axis) encountered")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "run_from_raw_standalone"
+OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "past" / "run_from_raw_standalone"
 DRY_RUN = False
 
 FILES = {"gangnam": DATA_DIR / "gangnam.xlsx", "sinchon": DATA_DIR / "sinchon.xlsx"}

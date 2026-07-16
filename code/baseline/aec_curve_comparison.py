@@ -36,7 +36,7 @@ GRID = "#e1e0d9"
 SURFACE = "#fcfcfb"
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "../..", "data")
-OUT_ROOT = os.path.join(os.path.dirname(__file__), "../..", "outputs", "0_aec_curve_comparison")
+OUT_ROOT = os.path.join(os.path.dirname(__file__), "../..", "outputs", "0_clinic-only_baseline", "aec_curve_comparison")
 COHORTS = ["gangnam", "sinchon"]
 
 N_SLICES = 128

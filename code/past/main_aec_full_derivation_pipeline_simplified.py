@@ -67,7 +67,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
 OUT_DIR = PROJECT_ROOT /  "outputs" / "full_derivation" /  "full_derivation_output"
-PLOT_1X3_OUT_DIR = PROJECT_ROOT /  "outputs" / "full_derivation" / "aec_1x3_core_mean_curves"
+PLOT_1X3_OUT_DIR = PROJECT_ROOT /  "outputs" / "past" / "full_derivation" / "aec_1x3_core_mean_curves"
 
 SEED = 20260629
 RNG = np.random.default_rng(SEED)
