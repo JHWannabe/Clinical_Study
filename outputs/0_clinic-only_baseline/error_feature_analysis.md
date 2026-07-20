@@ -1,13 +1,13 @@
 # Error feature analysis: TP/FN/TN/FP
 
-Clinical-only classifier (`new_hypothesis.py`) analyzed on internal OOF predictions.
+Clinical-only classifier analyzed on internal OOF predictions.
 
 ## Group sizes
 
 | group   |   n |
 |:--------|----:|
-| TN      | 515 |
-| FP      | 446 |
+| TN      | 514 |
+| FP      | 447 |
 | TP      | 117 |
 | FN      |  12 |
 
@@ -15,62 +15,62 @@ Clinical-only classifier (`new_hypothesis.py`) analyzed on internal OOF predicti
 
 | group   |   age |   height |   weight |   bmi |   smi |   score |
 |:--------|------:|---------:|---------:|------:|------:|--------:|
-| FN      | 52.5  |   161.8  |    65.12 | 24.72 | 31.55 |   -3.48 |
-| FP      | 56.95 |   165.26 |    60.35 | 21.96 | 46.03 |   -1.75 |
-| TN      | 56.48 |   158.46 |    64.13 | 25.4  | 47.23 |   -3.86 |
-| TP      | 59.74 |   166.96 |    57.86 | 20.62 | 36.5  |   -0.88 |
+| FN      | 52.5  |   161.8  |    65.12 | 24.72 | 31.55 |    0.04 |
+| FP      | 57.03 |   165.22 |    60.31 | 21.95 | 45.97 |    0.17 |
+| TN      | 56.4  |   158.48 |    64.17 | 25.4  | 47.28 |    0.03 |
+| TP      | 59.74 |   166.96 |    57.86 | 20.62 | 36.5  |    0.32 |
 
 ## Sex composition by group (fraction Male)
 
 | group   |   frac_male |
 |:--------|------------:|
 | FN      |       0.333 |
-| FP      |       0.489 |
-| TN      |       0.186 |
+| FP      |       0.485 |
+| TN      |       0.189 |
 | TP      |       0.615 |
 
 ## Full-data LR coefficients (standardized features: age, height, weight, sex_M)
 
 |           |   coefficient |
 |:----------|--------------:|
-| age       |        0.3709 |
-| height    |        1.5221 |
-| weight    |       -1.6415 |
-| sex_M     |        0.4019 |
-| intercept |       -2.6765 |
+| age       |        0.7805 |
+| height    |        0.38   |
+| weight    |        1.5382 |
+| sex_M     |       -1.6348 |
+| intercept |       -2.9516 |
 
 ## Correlation of OOF score with derived BMI / raw features
 
 |        |   correlation_with_score |
 |:-------|-------------------------:|
-| bmi    |                  -0.7764 |
-| height |                   0.4766 |
-| weight |                  -0.3204 |
+| bmi    |                  -0.6167 |
+| height |                   0.4173 |
+| weight |                  -0.2492 |
 
 ## TP vs FN (among actual low-SMI positives): Welch t-test
 
-| feature   |   TP_mean |   FN_mean |   diff |     t |      p |
-|:----------|----------:|----------:|-------:|------:|-------:|
-| age       |     59.74 |     52.5  |   7.24 |  1.23 | 0.2409 |
-| height    |    166.96 |    161.8  |   5.16 |  1.75 | 0.1045 |
-| weight    |     57.86 |     65.12 |  -7.27 | -1.96 | 0.0725 |
-| bmi       |     20.62 |     24.72 |  -4.1  | -4.5  | 0.0006 |
+| feature   |   TP_mean |   FN_mean |    diff |       t |      p |
+|:----------|----------:|----------:|--------:|--------:|-------:|
+| age       |   59.735  |   52.5    |  7.235  |  1.2324 | 0.2409 |
+| height    |  166.957  |  161.8    |  5.1573 |  1.754  | 0.1045 |
+| weight    |   57.8594 |   65.125  | -7.2656 | -1.9577 | 0.0725 |
+| bmi       |   20.6244 |   24.7241 | -4.0997 | -4.5037 | 0.0006 |
 
 ## TN vs FP (among actual negatives): Welch t-test
 
-| feature   |   TN_mean |   FP_mean |   diff |      t |      p |
-|:----------|----------:|----------:|-------:|-------:|-------:|
-| age       |     56.48 |     56.95 |  -0.47 |  -0.61 | 0.5398 |
-| height    |    158.46 |    165.26 |  -6.8  | -14.26 | 0      |
-| weight    |     64.13 |     60.35 |   3.79 |   5.71 | 0      |
-| bmi       |     25.4  |     21.96 |   3.44 |  22    | 0      |
+| feature   |   TN_mean |   FP_mean |    diff |        t |      p |
+|:----------|----------:|----------:|--------:|---------:|-------:|
+| age       |   56.4027 |   57.0313 | -0.6286 |  -0.8235 | 0.4105 |
+| height    |  158.479  |  165.224  | -6.7449 | -14.1204 | 0      |
+| weight    |   64.1702 |   60.3099 |  3.8603 |   5.8304 | 0      |
+| bmi       |   25.4034 |   21.9537 |  3.4497 |  22.0888 | 0      |
 
 ## Sex distribution chi-square: TP vs FN
 
 | group   |   F |   M |
 |:--------|----:|----:|
-| FN      |   8 |   4 |
 | TP      |  45 |  72 |
+| FN      |   8 |   4 |
 
 chi2=2.51, p=0.1134
 
@@ -78,7 +78,7 @@ chi2=2.51, p=0.1134
 
 | group   |   F |   M |
 |:--------|----:|----:|
-| FP      | 228 | 218 |
-| TN      | 419 |  96 |
+| TN      | 417 |  97 |
+| FP      | 230 | 217 |
 
-chi2=97.97, p=0.0000
+chi2=94.36, p=0.0000

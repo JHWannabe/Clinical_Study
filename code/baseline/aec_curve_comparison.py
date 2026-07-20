@@ -132,8 +132,15 @@ def load_data(data_path):
     for col in ["Height", "Weight", "z_range"]:
         df[f"{col}Group2"] = overall_median_group2(df, col)
 
+    # SMI is recomputed from TAMA/Height (not read from the metadata sheet's own
+    # "SMI" column) to match clinic-only_baseline.load_cohort() exactly -- the
+    # ground-truth y actually used to train/evaluate the Stage-1/Stage-2 models.
+    # The metadata SMI column disagrees substantially (internal Low-SMI n=291 vs
+    # n=129 here; max abs SMI diff ~13.8), which silently made this script's
+    # Low-SMI grouping inconsistent with the model's own labels.
+    smi = df["TAMA"] / (df["Height"] / 100.0) ** 2
     cutoff = df["PatientSex"].map(LOW_SMI_CUTOFF)
-    df["LowSMI"] = np.where(df["SMI"] < cutoff, "Low SMI", "Non-low SMI")
+    df["LowSMI"] = np.where(smi < cutoff, "Low SMI", "Non-low SMI")
 
     df["Vendor"] = df["Manufacturer"].map(VENDOR_MAP)
 
@@ -249,12 +256,12 @@ def run_cohort(cohort):
          "02_aec_curve_by_age.png", "나이(median 분할)에 따른 AEC 곡선 비교"),
         ("TAMAGroup2", ["Low", "High"], ["TAMA ≤ 성별 median", "TAMA > 성별 median"],
          "03_aec_curve_by_tama.png", "TAMA(성별 median 분할)에 따른 AEC 곡선 비교"),
-        ("BMIGroup2", ["Low", "High"], ["BMI ≤ 성별 median", "BMI > 성별 median"],
-         "04_aec_curve_by_bmi.png", "BMI(성별 median 분할)에 따른 AEC 곡선 비교"),
         ("HeightGroup2", ["Low", "High"], ["Height ≤ median", "Height > median"],
          "05_aec_curve_by_height.png", "신장(median 분할)에 따른 AEC 곡선 비교"),
         ("WeightGroup2", ["Low", "High"], ["Weight ≤ median", "Weight > median"],
          "06_aec_curve_by_weight.png", "체중(median 분할)에 따른 AEC 곡선 비교"),
+        ("BMIGroup2", ["Low", "High"], ["BMI ≤ 성별 median", "BMI > 성별 median"],
+         "04_aec_curve_by_bmi.png", "BMI(성별 median 분할)에 따른 AEC 곡선 비교"),
         ("LowSMI", ["Low SMI", "Non-low SMI"], ["Low SMI", "Non-low SMI"],
          "07_aec_curve_by_low_smi.png", "Low-SMI 임상 cutoff에 따른 AEC 곡선 비교"),
         ("z_rangeGroup2", ["Low", "High"], ["Scan length ≤ median", "Scan length > median"],
