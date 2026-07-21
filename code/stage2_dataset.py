@@ -6,8 +6,6 @@ from __future__ import annotations
 # threshold at Sensitivity>=90%, and saves the internal patients the screen
 # calls Positive, split into TP (actual low-SMI) and FP (actual non-low-SMI)
 # rows, for downstream Stage-2 work.
-#
-# Run: python code/1_stage2.py
 
 import importlib
 import sys
@@ -21,7 +19,6 @@ baseline = importlib.import_module("clinic-only_baseline")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "1_stage2"
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
@@ -113,14 +110,3 @@ def build_stage2_inputs_external(screen: dict) -> tuple[pd.DataFrame, pd.DataFra
     x_ext = baseline.apply_clinical_standardizer(baseline.raw_clinical_matrix(meta_ext), screen["med"], screen["mu"], screen["sd"])
     score_ext = screen["model"].predict_proba(x_ext)[:, 1]
     return _stage1_positive_rows(EXTERNAL_XLSX, meta_ext, y_ext, score_ext, screen["th"], x_ext)
-
-
-def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    screen = fit_internal_screen()
-    build_stage2_inputs(screen)
-    build_stage2_inputs_external(screen)
-
-
-if __name__ == "__main__":
-    main()

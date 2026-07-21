@@ -199,6 +199,11 @@ def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: 
     ax.plot(fpr, tpr, color=CURVE_COLOR, linewidth=2.5, solid_capstyle="round")
     ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1)
 
+    for target_sens in TARGET_SENSITIVITIES:
+        ax.axhline(target_sens, color=INK_MUTED, linestyle=":", linewidth=1, alpha=0.7, zorder=0)
+        ax.text(0.02, target_sens + 0.012, f"Se={target_sens:.2f}", ha="left", va="bottom",
+                fontsize=8.5, color=INK_MUTED)
+
     ax.text(0.97, 0.16, f"AUC = {auc_stats['auc']:.3f}", ha="right", va="bottom",
             fontsize=26, fontweight="bold", color=INK_PRIMARY, transform=ax.transAxes)
     ax.text(0.97, 0.10, f"95% CI [{auc_stats['ci_lower']:.3f}, {auc_stats['ci_upper']:.3f}]",
