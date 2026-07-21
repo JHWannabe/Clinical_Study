@@ -298,7 +298,11 @@ def error_feature_analysis(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray,
             a, b = arr[a_mask], arr[b_mask]
             t, p = stats.ttest_ind(a, b, equal_var=False)
             out_rows.append({f"{group_a}_mean": a.mean(), f"{group_b}_mean": b.mean(), "diff": a.mean() - b.mean(), "t": t, "p": p})
-        return pd.DataFrame(out_rows, index=["age", "height", "weight", "bmi"]).round(4)
+        df = pd.DataFrame(out_rows, index=["age", "height", "weight", "bmi"])
+        for col in [f"{group_a}_mean", f"{group_b}_mean", "diff", "t"]:
+            df[col] = df[col].round(4)
+        df["p"] = df["p"].apply(lambda v: f"{v:.4e}")
+        return df
 
     lines += ["## TP vs FN (among actual low-SMI positives): Welch t-test", ""]
     lines.append(welch_table("TP", "FN").reset_index(names="feature").to_markdown(index=False))
@@ -306,6 +310,10 @@ def error_feature_analysis(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray,
 
     lines += ["## TN vs FP (among actual negatives): Welch t-test", ""]
     lines.append(welch_table("TN", "FP").reset_index(names="feature").to_markdown(index=False))
+    lines.append("")
+
+    lines += ["## TP vs FP (among model-predicted positives): Welch t-test", ""]
+    lines.append(welch_table("TP", "FP").reset_index(names="feature").to_markdown(index=False))
     lines.append("")
 
     def chi_square(group_a: str, group_b: str) -> tuple[pd.DataFrame, float, float]:
@@ -317,14 +325,21 @@ def error_feature_analysis(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray,
     table, chi2, p = chi_square("TP", "FN")
     lines.append(table.reset_index().to_markdown(index=False))
     lines.append("")
-    lines.append(f"chi2={chi2:.2f}, p={p:.4f}")
+    lines.append(f"chi2={chi2:.2f}, p={p:.4e}")
     lines.append("")
 
     lines += ["## Sex distribution chi-square: TN vs FP", ""]
     table, chi2, p = chi_square("TN", "FP")
     lines.append(table.reset_index().to_markdown(index=False))
     lines.append("")
-    lines.append(f"chi2={chi2:.2f}, p={p:.4f}")
+    lines.append(f"chi2={chi2:.2f}, p={p:.4e}")
+    lines.append("")
+
+    lines += ["## Sex distribution chi-square: TP vs FP", ""]
+    table, chi2, p = chi_square("TP", "FP")
+    lines.append(table.reset_index().to_markdown(index=False))
+    lines.append("")
+    lines.append(f"chi2={chi2:.2f}, p={p:.4e}")
     lines.append("")
 
     (out_dir / "error_feature_analysis.md").write_text("\n".join(lines), encoding="utf-8")

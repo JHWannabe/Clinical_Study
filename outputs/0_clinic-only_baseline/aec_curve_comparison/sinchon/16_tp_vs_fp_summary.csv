@@ -1,0 +1,2 @@
+﻿figure,comparison,group_col,groups,test,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value,significant_p<0.05
+16_aec_curve_tp_vs_fp.png,Stage-1 TP vs FP,group,TP (true low-SMI) (n=131); FP (false positive) (n=398),whole-curve RMSD permutation,0.027438801825249957,3,-0.05378814518803687,TP (true low-SMI) < FP (false positive),2000,0.017491254372813594,True
