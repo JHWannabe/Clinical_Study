@@ -1,9 +1,0 @@
-model,cohort,group,n,low_smi_events,low_smi_rate,fisher_p
-primary_interpretable_4region,Gangnam internal,Clinical+ / AEC+ de-escalation morphology,53,2,0.03773584905660377,0.0005530415363566468
-primary_interpretable_4region,Gangnam internal,Clinical+ / AEC- retained morphology,518,115,0.222007722007722,0.0005530415363566468
-primary_interpretable_4region,Sinchon external,Clinical+ / AEC+ de-escalation morphology,56,2,0.03571428571428571,2.3049584728890404e-05
-primary_interpretable_4region,Sinchon external,Clinical+ / AEC- retained morphology,480,129,0.26875,2.3049584728890404e-05
-secondary_CNN_mimic,Gangnam internal,Clinical+ / AEC+ de-escalation morphology,40,2,0.05,0.007970286560072353
-secondary_CNN_mimic,Gangnam internal,Clinical+ / AEC- retained morphology,531,115,0.21657250470809794,0.007970286560072353
-secondary_CNN_mimic,Sinchon external,Clinical+ / AEC+ de-escalation morphology,51,1,0.0196078431372549,8.86851911511596e-06
-secondary_CNN_mimic,Sinchon external,Clinical+ / AEC- retained morphology,485,130,0.26804123711340205,8.86851911511596e-06

@@ -1,7 +1,0 @@
-rule,dataset,operating_point,branch_vote_agreement_cpos,consensus_agreement_cpos
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,g1090_internal,S80,0.9526515151515151,0.9444444444444444
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,g1090_internal,S85,0.9479166666666666,0.918859649122807
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,g1090_internal,S90,0.9452714535901926,0.9404553415061296
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,sdata_external,S80,0.9302884615384616,0.9206730769230769
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,sdata_external,S85,0.9409190371991247,0.9277899343544858
-surrogate_mimic_guarded_t0.65_0.45_0.75_0.45_m16668,sdata_external,S90,0.9477611940298507,0.9365671641791045

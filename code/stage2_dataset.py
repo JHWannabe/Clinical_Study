@@ -108,5 +108,5 @@ def build_stage2_inputs_external(screen: dict) -> tuple[pd.DataFrame, pd.DataFra
     # as build_stage2_inputs (stage1_rows_all, stage1_rows_pos, clin, aec).
     meta_ext, y_ext = baseline.load_cohort(EXTERNAL_XLSX)
     x_ext = baseline.apply_clinical_standardizer(baseline.raw_clinical_matrix(meta_ext), screen["med"], screen["mu"], screen["sd"])
-    score_ext = screen["model"].predict_proba(x_ext)[:, 1]
+    score_ext = screen["model"].decision_function(x_ext)
     return _stage1_positive_rows(EXTERNAL_XLSX, meta_ext, y_ext, score_ext, screen["th"], x_ext)

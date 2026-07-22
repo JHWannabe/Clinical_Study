@@ -1,0 +1,5 @@
+﻿figure,comparison,group_col,groups,test,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value,n_matched_pairs,significant_p<0.05
+16_aec_curve_tp_vs_fp.png,Stage-1 TP vs FP,group,TP (true low-SMI) (n=131); FP (false positive) (n=398),whole-curve RMSD permutation,0.027438801825249957,3,-0.05378814518803687,TP (true low-SMI) < FP (false positive),2000,0.017491254372813594,,True
+17_aec_curve_fp_vs_tn.png,Stage-1 FP vs TN,group,FP (false positive) (n=398); TN (true negative) (n=387),whole-curve RMSD permutation,0.022612805294047796,73,-0.0398816638862074,FP (false positive) < TN (true negative),2000,0.004497751124437781,,True
+18_aec_curve_tp_vs_tn.png,Stage-1 TP vs TN,group,TP (true low-SMI) (n=131); TN (true negative) (n=387),whole-curve RMSD permutation,0.02889132337217678,114,0.054663506172461185,TP (true low-SMI) > TN (true negative),2000,0.013493253373313344,,True
+19_aec_curve_tp_vs_fp_matched.png,Stage-1 TP vs FP (propensity-matched),group,TP (true low-SMI) (n=94); FP (false positive) (n=94),whole-curve RMSD permutation,0.04222631544824158,3,-0.0743847853794799,TP (true low-SMI) < FP (false positive),2000,0.01649175412293853,94.0,True

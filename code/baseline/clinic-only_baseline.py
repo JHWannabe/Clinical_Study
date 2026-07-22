@@ -74,7 +74,7 @@ def oof_scores(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     for fold_id, (tr_idx, va_idx) in enumerate(skf.split(x, y)):
         model = LogisticRegression(C=1.0, solver="lbfgs", max_iter=5000, random_state=SEED + fold_id)
         model.fit(x[tr_idx], y[tr_idx])
-        oof[va_idx] = model.predict_proba(x[va_idx])[:, 1]
+        oof[va_idx] = model.decision_function(x[va_idx])
     return oof
 
 
@@ -183,7 +183,7 @@ def auc_significance_stats(y: np.ndarray, score: np.ndarray, n_boot: int = 3000,
             "mannwhitney_u": float(u_stat), "p_value": float(p_value)}
 
 
-def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: Path, title: str) -> None:
+def _draw_roc(ax: Axes, y: np.ndarray, score: np.ndarray, auc_stats: dict, title: str) -> None:
     # AUC is the headline number, so it gets hero-figure treatment (large, bold, in
     # the plot's dead space below the curve) instead of being buried at legend font
     # size -- CI/p-value/n ride underneath it as a de-emphasized secondary line.
@@ -195,7 +195,6 @@ def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: 
     p = auc_stats["p_value"]
     p_str = "p<1e-300" if p == 0 else f"p={p:.2e}"
 
-    fig, ax = plt.subplots(figsize=(6.5, 6.5))
     ax.plot(fpr, tpr, color=CURVE_COLOR, linewidth=2.5, solid_capstyle="round")
     ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1)
 
@@ -219,6 +218,24 @@ def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: 
     ax.grid(alpha=0.3)
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
+
+
+def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: Path, title: str) -> None:
+    fig, ax = plt.subplots(figsize=(6.5, 6.5))
+    _draw_roc(ax, y, score, auc_stats, title)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved ROC curve to {out_path}")
+
+
+def plot_roc_curve_dual(rows: list[tuple[np.ndarray, np.ndarray, dict, str]], out_path: Path) -> None:
+    # Same per-panel drawing as plot_roc_curve, side by side (e.g. internal/external)
+    # in one figure -- for clinical_only_roc_curve.png, which used to be internal-only.
+    fig, axes = plt.subplots(1, len(rows), figsize=(6.5 * len(rows), 6.5))
+    axes = np.atleast_1d(axes)
+    for ax, (y, score, auc_stats, title) in zip(axes, rows):
+        _draw_roc(ax, y, score, auc_stats, title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
@@ -360,14 +377,23 @@ def main() -> None:
     print(f"[internal / OOF] AUC={auc_stats['auc']:.4f} "
           f"95%CI=[{auc_stats['ci_lower']:.4f}, {auc_stats['ci_upper']:.4f}] "
           f"Mann-Whitney p={auc_stats['p_value']:.3e}")
-    pd.DataFrame([auc_stats]).to_csv(OUTPUT_DIR / "clinical_only_auc_significance.csv", index=False)
-    plot_roc_curve(y_int, oof, auc_stats, OUTPUT_DIR / "clinical_only_roc_curve.png",
-                   "Clinical-only Logistic Regression: ROC (internal, OOF)")
 
     model = fit_baseline_model(x_int, y_int)
     meta_ext, y_ext = load_cohort(EXTERNAL_XLSX)
     x_ext = apply_clinical_standardizer(raw_clinical_matrix(meta_ext), med, mu, sd)
-    score_ext = model.predict_proba(x_ext)[:, 1]
+    score_ext = model.decision_function(x_ext)
+
+    auc_stats_ext = auc_significance_stats(y_ext, score_ext)
+    print(f"[external / frozen internal model] AUC={auc_stats_ext['auc']:.4f} "
+          f"95%CI=[{auc_stats_ext['ci_lower']:.4f}, {auc_stats_ext['ci_upper']:.4f}] "
+          f"Mann-Whitney p={auc_stats_ext['p_value']:.3e}")
+
+    pd.DataFrame([{"cohort": "internal", **auc_stats}, {"cohort": "external", **auc_stats_ext}]) \
+        .to_csv(OUTPUT_DIR / "clinical_only_auc_significance.csv", index=False)
+    plot_roc_curve_dual([
+        (y_int, oof, auc_stats, "Clinical-only Logistic Regression: ROC (internal, OOF)"),
+        (y_ext, score_ext, auc_stats_ext, "Clinical-only Logistic Regression: ROC (external, frozen internal model)"),
+    ], OUTPUT_DIR / "clinical_only_roc_curve.png")
 
     all_results = []
     summary_rows = []

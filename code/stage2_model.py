@@ -61,45 +61,137 @@ EARLY_STOP_MIN_DELTA = 1e-4
 # without needing more data or a longer per-model training run.
 N_ENSEMBLE_SEEDS = 5
 
+# Clinical branch: "frozen_lr" (default) feeds Stage-1's own frozen LR score straight
+# into fusion as z_clin (0 learned params) instead of re-learning the clinical->outcome
+# relationship. Chosen over "mlp" per code/stage2_model_branch_ablation.py:
+# on the same OOF/frozen-external protocol, frozen_lr roughly doubles internal Net NRI
+# and improves external versus the MLP branch, while using zero clinical parameters
+# instead of 688 -- the 4-input MLP was adding capacity the joint fusion training
+# didn't need and that diluted the AEC signal. See that script's docstring for the
+# "linear" (Linear(4,16), no activation) middle-ground variant.
+# NOTE (2026-07-22): the ablation numbers in that script predate the switch from
+# predict_proba to decision_function for Stage-1's score (see fit_score_standardizer) --
+# rerun before quoting exact figures; current main() numbers are internal +71/external +34.
+CLIN_BRANCH_VARIANT = "frozen_lr"
+
+# AEC branch: "convpool" (default) is the global-avg-pooled 1D-CNN below. Other variants
+# live in code/stage2_model_branch_ablation.py -- see that script's docstring.
+AEC_BRANCH_VARIANT = "convpool"
+
 
 class ClinicalBranch(nn.Module):
-    # MLP branch over the 4 standardized clinical features.
-    def __init__(self, in_dim: int = 4, embed_dim: int = 16, dropout: float = 0.2) -> None:
+    # variant="mlp" (default): 2-layer MLP over the 4 standardized clinical features.
+    # variant="linear": single Linear, no hidden layer/activation -- an ablation asking
+    # whether the MLP's nonlinearity buys anything over a Stage-1-LR-like linear map,
+    # given Stage-1's own clinical-only LR already captures this relationship well
+    # (AUC=0.828) and the branch has only 4 inputs to work with.
+    def __init__(self, in_dim: int = 4, embed_dim: int = 16, dropout: float = 0.2, variant: str = "mlp") -> None:
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, 32),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(32, embed_dim),
-            nn.ReLU(),
-        )
+        self.variant = variant
+        if variant == "mlp":
+            self.net = nn.Sequential(
+                nn.Linear(in_dim, 32),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(32, embed_dim),
+                nn.ReLU(),
+            )
+        elif variant == "linear":
+            self.net = nn.Linear(in_dim, embed_dim)
+        else:
+            raise ValueError(f"unknown ClinicalBranch variant: {variant}")
 
     def forward(self, x_clin: torch.Tensor) -> torch.Tensor:
         return self.net(x_clin)
 
 
+class IdentityBranch(nn.Module):
+    # Passes its input through unchanged -- used for clin_variant="frozen_lr", where
+    # x_clin IS the frozen Stage-1 LR score (standardized, see fit_score_standardizer)
+    # and the clinical branch has nothing left to learn; z_clin is that score itself.
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+
 class AecBranch(nn.Module):
-    # 1D-CNN branch over the 128-slice AEC curve. Global-average-pools the
-    # conv features so the branch reads the curve holistically (whole-shape),
-    # not as 128 independent point-wise inputs.
-    def __init__(self, n_slices: int = 128, embed_dim: int = 16, dropout: float = 0.2) -> None:
+    # 1D-CNN branch over the 128-slice AEC curve. variant="convpool" (default)
+    # global-average-pools the conv features so the branch reads the curve
+    # holistically (whole-shape), not as 128 independent point-wise inputs.
+    # variant="convpool_avgmax" additionally global-max-pools the same conv
+    # features (concatenated with the average) -- an ablation asking whether
+    # the curve's peak (value/sharpness) carries information the average level
+    # alone discards. variant="convflat" skips pooling entirely and flattens
+    # the full (channels x n_slices) conv feature map into the fc layer -- the
+    # CNN's own directly-extracted per-position features, unreduced, as opposed
+    # to either global pooling or AecHandcraftedBranch's hand-designed stats.
+    # See stage2_model_branch_ablation.py.
+    def __init__(self, n_slices: int = 128, embed_dim: int = 16, dropout: float = 0.2,
+                 variant: str = "convpool") -> None:
         super().__init__()
+        if variant not in ("convpool", "convpool_avgmax", "convflat"):
+            raise ValueError(f"unknown AecBranch variant: {variant}")
+        self.variant = variant
         self.conv = nn.Sequential(
             nn.Conv1d(1, 8, kernel_size=7, padding=3),
             nn.ReLU(),
             nn.Conv1d(8, 16, kernel_size=5, padding=2),
             nn.ReLU(),
-            nn.AdaptiveAvgPool1d(1),
         )
+        if variant == "convflat":
+            self.avg_pool = None
+            self.max_pool = None
+            fc_in = 16 * n_slices
+        else:
+            self.avg_pool = nn.AdaptiveAvgPool1d(1)
+            self.max_pool = nn.AdaptiveMaxPool1d(1) if variant == "convpool_avgmax" else None
+            fc_in = 32 if variant == "convpool_avgmax" else 16
         self.fc = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(16, embed_dim),
+            nn.Linear(fc_in, embed_dim),
             nn.ReLU(),
         )
 
     def forward(self, x_aec: torch.Tensor) -> torch.Tensor:
-        z = self.conv(x_aec.unsqueeze(1)).squeeze(-1)
-        return self.fc(z)
+        feat = self.conv(x_aec.unsqueeze(1))
+        if self.variant == "convflat":
+            pooled = feat.flatten(start_dim=1)
+        else:
+            pooled = self.avg_pool(feat).squeeze(-1)
+            if self.max_pool is not None:
+                pooled = torch.cat([pooled, self.max_pool(feat).squeeze(-1)], dim=1)
+        return self.fc(pooled)
+
+
+class AecHandcraftedBranch(nn.Module):
+    # No CNN: mean/std/slope/AUC/peak-value/peak-location/curvature descriptors of the
+    # whole 128-slice curve, through a single Linear layer -- mirrors the clinical
+    # branch's "linear" variant (stage2_model_branch_ablation.py), asking
+    # whether the CNN's learned shape-extraction buys anything over classical
+    # whole-curve summary statistics given how little data (n~1090) it has to fit on.
+    N_FEATURES = 7
+
+    def __init__(self, n_slices: int = 128, embed_dim: int = 16, dropout: float = 0.2) -> None:
+        super().__init__()
+        self.n_slices = n_slices
+        t = torch.arange(n_slices, dtype=torch.float32) / (n_slices - 1)
+        self.register_buffer("t", t)
+        t_centered = t - t.mean()
+        self.register_buffer("t_centered", t_centered)
+        self.t_var = float((t_centered ** 2).sum())
+        self.net = nn.Sequential(nn.Dropout(dropout), nn.Linear(self.N_FEATURES, embed_dim), nn.ReLU())
+
+    def _features(self, x: torch.Tensor) -> torch.Tensor:
+        mean = x.mean(dim=1)
+        std = x.std(dim=1)
+        slope = (x * self.t_centered).sum(dim=1) / self.t_var
+        auc = torch.trapz(x, self.t, dim=1)
+        peak_val, peak_idx = x.max(dim=1)
+        peak_loc = peak_idx.float() / (self.n_slices - 1)
+        curvature = (x[:, 2:] - 2 * x[:, 1:-1] + x[:, :-2]).abs().mean(dim=1)
+        return torch.stack([mean, std, slope, auc, peak_val, peak_loc, curvature], dim=1)
+
+    def forward(self, x_aec: torch.Tensor) -> torch.Tensor:
+        return self.net(self._features(x_aec))
 
 
 class LateFusionNet(nn.Module):
@@ -112,12 +204,31 @@ class LateFusionNet(nn.Module):
         embed_dim: int = 16,
         fusion_hidden: int = 16,
         dropout: float = 0.2,
+        clin_variant: str = CLIN_BRANCH_VARIANT,
+        aec_variant: str = AEC_BRANCH_VARIANT,
+        aec_weight: float = 1.0,
     ) -> None:
         super().__init__()
-        self.clin_branch = ClinicalBranch(clin_dim, embed_dim, dropout)
-        self.aec_branch = AecBranch(n_slices, embed_dim, dropout)
+        if clin_variant == "frozen_lr":
+            self.clin_branch = IdentityBranch()
+            clin_embed_dim = clin_dim  # =1, the raw frozen Stage-1 LR score
+        else:
+            self.clin_branch = ClinicalBranch(clin_dim, embed_dim, dropout, variant=clin_variant)
+            clin_embed_dim = embed_dim
+        if aec_variant == "handcrafted":
+            self.aec_branch = AecHandcraftedBranch(n_slices, embed_dim, dropout)
+        else:
+            self.aec_branch = AecBranch(n_slices, embed_dim, dropout, variant=aec_variant)
+        # Fixed (non-learned) multiplier on z_aec before concat -- an ablation knob asking
+        # whether up-weighting the AEC embedding's scale relative to z_clin's, before the
+        # fusion head's first Linear layer, changes what training converges to (a later
+        # Linear layer *could* in principle absorb any fixed rescaling into its own weights,
+        # but weight_decay penalizes weight magnitude, so a smaller raw z_aec scale can still
+        # end up under-weighted in practice -- this tests that empirically rather than
+        # assuming it away). aec_weight=1.0 reproduces the plain late-fusion behavior exactly.
+        self.aec_weight = aec_weight
         self.fusion_head = nn.Sequential(
-            nn.Linear(embed_dim * 2, fusion_hidden),
+            nn.Linear(embed_dim + clin_embed_dim, fusion_hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(fusion_hidden, 1),
@@ -125,7 +236,7 @@ class LateFusionNet(nn.Module):
 
     def forward(self, x_clin: torch.Tensor, x_aec: torch.Tensor) -> torch.Tensor:
         z_clin = self.clin_branch(x_clin)
-        z_aec = self.aec_branch(x_aec)
+        z_aec = self.aec_branch(x_aec) * self.aec_weight
         z = torch.cat([z_clin, z_aec], dim=1)
         return self.fusion_head(z).squeeze(-1)  # logit
 
@@ -195,7 +306,9 @@ def _train_with_early_stopping(model: LateFusionNet, x_clin_tr: torch.Tensor, x_
 
 
 def train_fold(x_clin_tr: torch.Tensor, x_aec_tr: torch.Tensor, y_tr: torch.Tensor,
-                x_clin_va: torch.Tensor, x_aec_va: torch.Tensor, seed: int) -> tuple[np.ndarray, list[float]]:
+                x_clin_va: torch.Tensor, x_aec_va: torch.Tensor, seed: int,
+                clin_variant: str = CLIN_BRANCH_VARIANT, aec_variant: str = AEC_BRANCH_VARIANT,
+                aec_weight: float = 1.0) -> tuple[np.ndarray, list[float]]:
     # Trains N_ENSEMBLE_SEEDS independently-initialized models on the same
     # outer-train fold and averages their sigmoid outputs on the outer-va fold --
     # only the first seed's loss history is kept (for the convergence plot; the
@@ -205,7 +318,8 @@ def train_fold(x_clin_tr: torch.Tensor, x_aec_tr: torch.Tensor, y_tr: torch.Tens
     for i in range(N_ENSEMBLE_SEEDS):
         seed_i = seed * 100 + i
         torch.manual_seed(seed_i)
-        model = LateFusionNet(clin_dim=x_clin_tr.shape[1], n_slices=x_aec_tr.shape[1])
+        model = LateFusionNet(clin_dim=x_clin_tr.shape[1], n_slices=x_aec_tr.shape[1],
+                               clin_variant=clin_variant, aec_variant=aec_variant, aec_weight=aec_weight)
         lh = _train_with_early_stopping(model, x_clin_tr, x_aec_tr, y_tr)
         if i == 0:
             loss_history = lh
@@ -217,7 +331,9 @@ def train_fold(x_clin_tr: torch.Tensor, x_aec_tr: torch.Tensor, y_tr: torch.Tens
     return np.mean(preds, axis=0), loss_history
 
 
-def oof_scores(x_clin: torch.Tensor, x_aec: torch.Tensor, y: np.ndarray) -> tuple[np.ndarray, list[list[float]]]:
+def oof_scores(x_clin: torch.Tensor, x_aec: torch.Tensor, y: np.ndarray,
+               clin_variant: str = CLIN_BRANCH_VARIANT, aec_variant: str = AEC_BRANCH_VARIANT,
+               aec_weight: float = 1.0) -> tuple[np.ndarray, list[list[float]]]:
     oof = np.zeros(len(y), dtype=float)
     fold_loss_histories: list[list[float]] = []
     skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
@@ -226,14 +342,16 @@ def oof_scores(x_clin: torch.Tensor, x_aec: torch.Tensor, y: np.ndarray) -> tupl
         oof[va_idx], loss_history = train_fold(
             x_clin[tr_idx], x_aec[tr_idx], y_tr,
             x_clin[va_idx], x_aec[va_idx],
-            seed=SEED + fold_id,
+            seed=SEED + fold_id, clin_variant=clin_variant, aec_variant=aec_variant, aec_weight=aec_weight,
         )
         fold_loss_histories.append(loss_history)
     return oof, fold_loss_histories
 
 
 def fit_final_model(x_clin: torch.Tensor, x_aec: torch.Tensor, y: np.ndarray,
-                     seed: int = SEED) -> tuple[LateFusionEnsemble, list[float]]:
+                     seed: int = SEED, clin_variant: str = CLIN_BRANCH_VARIANT,
+                     aec_variant: str = AEC_BRANCH_VARIANT,
+                     aec_weight: float = 1.0) -> tuple[LateFusionEnsemble, list[float]]:
     # Refit on the FULL internal Stage-2 cohort (no held-out fold) -- an
     # N_ENSEMBLE_SEEDS-model ensemble, mirroring train_fold, is the frozen
     # artifact applied to external (mirrors clinic-only_baseline.py's
@@ -244,7 +362,8 @@ def fit_final_model(x_clin: torch.Tensor, x_aec: torch.Tensor, y: np.ndarray,
     for i in range(N_ENSEMBLE_SEEDS):
         seed_i = seed * 100 + i
         torch.manual_seed(seed_i)
-        model = LateFusionNet(clin_dim=x_clin.shape[1], n_slices=x_aec.shape[1])
+        model = LateFusionNet(clin_dim=x_clin.shape[1], n_slices=x_aec.shape[1],
+                               clin_variant=clin_variant, aec_variant=aec_variant, aec_weight=aec_weight)
         lh = _train_with_early_stopping(model, x_clin, x_aec, y_t)
         if i == 0:
             loss_history = lh
@@ -310,8 +429,38 @@ def plot_stage1_vs_full_pipeline_roc(rows: list[dict], out_path: Path) -> None:
     print(f"Saved Stage-1 vs full-pipeline ROC comparison to {out_path}")
 
 
-def _to_tensors(stage2_input_clin, stage2_input_aec) -> tuple[torch.Tensor, torch.Tensor]:
-    x_clin = torch.tensor(stage2_input_clin[CLIN_COLS].to_numpy(dtype=np.float32))
+def fit_score_standardizer(stage1_scores: np.ndarray) -> tuple[float, float]:
+    # Stage-1's LR score is decision_function (log-odds), not predict_proba -- it isn't
+    # bounded to [0,1] and being screen-positive doesn't force it positive (e.g. internal:
+    # mean~-1.57, only ~6% of the Stage-2 cohort has score>0). The problem is scale, not
+    # sign: restricted to score >= th_stage1 (screen-positive), it sits well off zero
+    # (mean~-1.57, std~0.92) with no per-cohort centering, unlike the raw clinical
+    # features which are standardized to mean 0 / std 1 (fit_clinical_standardizer).
+    # Feeding it into the fusion head as-is lets training chase that offset instead of
+    # the signal in it -- confirmed empirically: without this standardization, external
+    # Net NRI drops to 0 (no reclassification at all), vs. +34 with it (see slide 7).
+    # Standardizing it the same way as the clinical features (fit once on the internal
+    # Stage-2 cohort, frozen and reused for external, matching fit_internal_screen's
+    # med/mu/sd pattern) removes that offset without discarding any information -- it's
+    # a monotonic affine transform of the same score.
+    mean = float(np.mean(stage1_scores))
+    std = float(np.std(stage1_scores))
+    return mean, std
+
+
+def _to_tensors(stage2_input_clin, stage2_input_aec, stage1_rows_pos,
+                 clin_variant: str = CLIN_BRANCH_VARIANT,
+                 score_standardizer: tuple[float, float] | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    # clin_variant="frozen_lr": x_clin IS the frozen Stage-1 LR score (stage1_rows_pos["score"],
+    # row-aligned with stage2_input_clin/aec by construction -- see stage2_dataset._stage1_positive_rows),
+    # standardized via score_standardizer (see fit_score_standardizer) -- not the 4 raw
+    # clinical features -- see CLIN_BRANCH_VARIANT above.
+    if clin_variant == "frozen_lr":
+        score = stage1_rows_pos["score"].to_numpy(dtype=np.float32)
+        score_mean, score_std = score_standardizer if score_standardizer is not None else fit_score_standardizer(score)
+        x_clin = torch.tensor((score - score_mean) / score_std).unsqueeze(1)
+    else:
+        x_clin = torch.tensor(stage2_input_clin[CLIN_COLS].to_numpy(dtype=np.float32))
     x_aec = torch.tensor(stage2_input_aec[AEC_COLS].to_numpy(dtype=np.float32))
     return x_clin, x_aec
 
@@ -490,7 +639,7 @@ def build_clinical_vs_aec_row(cohort: str, y_all: np.ndarray, pos_mask: np.ndarr
         "sens_clin": stage1_only["sens"], "sens_aec": result_final["sens"], "sens_p": exact_mcnemar_p(0, tp_lost),
         "spec_clin": stage1_only["spec"], "spec_aec": result_final["spec"], "spec_p": exact_mcnemar_p(fp_removed, 0),
         "acc_clin": accuracy(stage1_only), "acc_aec": accuracy(result_final), "acc_p": exact_mcnemar_p(fp_removed, tp_lost),
-        "net_nri": fp_removed - tp_lost,
+        "net_nri": fp_removed - tp_lost, "n_deesc": fp_removed + tp_lost,
     }
 
 
@@ -546,7 +695,7 @@ def plot_clinical_vs_aec_table(rows: list[dict], out_path: Path, title: str) -> 
         mid_y = (block_top + block_bottom) / 2
         ax.text(cx("cohort"), mid_y + 0.12, r["cohort"], ha="center", va="center",
                 fontsize=13.5, fontweight="bold", color=TABLE_TEXT)
-        ax.text(cx("cohort"), mid_y - 0.22, f"AUC {r['auc']:.3f}", ha="center", va="center",
+        ax.text(cx("cohort"), mid_y - 0.22, f"De-esc {r['n_deesc']}명", ha="center", va="center",
                 fontsize=9.5, color=TABLE_GOOD)
         ax.text(cx("n"), mid_y, f"{r['n']}", ha="center", va="center", fontsize=12, color=TABLE_TEXT)
         ax.text(cx("event"), mid_y, f"{r['event']}", ha="center", va="center", fontsize=12, color=TABLE_TEXT)
@@ -601,7 +750,9 @@ def main() -> None:
     screen = stage2.fit_internal_screen()
     stage1_rows_all_int, stage1_rows_int, stage2_input_clin_int, stage2_input_aec_int = stage2.build_stage2_inputs(screen)
     y_int = (stage1_rows_int["group"] == "TP").to_numpy().astype(int)
-    x_clin_int, x_aec_int = _to_tensors(stage2_input_clin_int, stage2_input_aec_int)
+    score_standardizer = fit_score_standardizer(stage1_rows_int["score"].to_numpy(dtype=np.float32))
+    x_clin_int, x_aec_int = _to_tensors(stage2_input_clin_int, stage2_input_aec_int, stage1_rows_int,
+                                         score_standardizer=score_standardizer)
 
     oof, fold_loss_histories = oof_scores(x_clin_int, x_aec_int, y_int)
 
@@ -620,7 +771,8 @@ def main() -> None:
 
     stage1_rows_all_ext, stage1_rows_ext, stage2_input_clin_ext, stage2_input_aec_ext = stage2.build_stage2_inputs_external(screen)
     y_ext = (stage1_rows_ext["group"] == "TP").to_numpy().astype(int)
-    x_clin_ext, x_aec_ext = _to_tensors(stage2_input_clin_ext, stage2_input_aec_ext)
+    x_clin_ext, x_aec_ext = _to_tensors(stage2_input_clin_ext, stage2_input_aec_ext, stage1_rows_ext,
+                                         score_standardizer=score_standardizer)
     score_ext = model.predict_proba(x_clin_ext, x_aec_ext)
 
     result_int = baseline.evaluate("internal", y_int, oof >= th, th)
