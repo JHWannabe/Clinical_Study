@@ -1,0 +1,54 @@
+=== Slide 1 ===
+   Comparison of AECs between groups after low-smi classification with clinic data
+   2026. 07. 24
+   JangHoon Chun
+   Department of, Medical Device Engineering & Management
+Gangnam Severance Hospital,
+Yonsei University College of Medicine
+
+=== Slide 2 ===
+   Detailed progress
+   Clinic 4개 변수(Sex, Age, Height, Weight)로 성별별 low-SMI 분류 (M: smi < 45.4, F: smi < 34.4)
+AUC internal 0.828 / external 0.835
+Sensitivity 90%인 컷오프로 Confusion Matrix 확인
+   [IMAGE]
+
+=== Slide 3 ===
+   Detailed progress
+   [TABLE 4x5]
+   [TABLE 5x4]
+
+=== Slide 4 ===
+   Detailed progress
+   [IMAGE]
+
+=== Slide 5 ===
+   Detailed progress
+   그룹 간 p / dp / d2p 곡선 비교
+   [TABLE 5x4]
+   [TABLE 5x4]
+
+=== Slide 6 ===
+   Detailed progress
+   [TABLE 3x3]
+   [TABLE 3x3]
+   TP vs TN
+   FP vs TN
+   Stage-1 AEC-128 곡선 비교 : TP/FP vs TN 모두 유의 (p<0.01)
+
+=== Slide 7 ===
+   [IMAGE]
+   Detailed progress
+   Stage-1 TP vs FP AEC-128 비교
+   [TABLE 3x3]
+   [IMAGE]
+
+=== Slide 8 ===
+   Next Plans
+   TP/FP 간의 차이가 유의한 Feature 찾기
+Clinic Data와 AEC Feature의 Multimodal Architecture 설계
+AUC 개선 방안 연구
+
+=== Slide 9 ===
+   [IMAGE]
+

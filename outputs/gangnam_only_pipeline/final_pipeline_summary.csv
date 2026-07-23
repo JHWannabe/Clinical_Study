@@ -1,0 +1,2 @@
+cohort,sens_before,sens_after,sens_floor,spec_before,spec_after,pass
+gangnam (5-fold OOF),0.9069767441860465,0.8682170542635659,0.8616279069767441,0.5348595213319459,0.6129032258064516,True

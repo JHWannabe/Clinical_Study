@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-# Single-cohort (Sinchon-trained) Stage-1 -> Stage-2 pipeline, evaluated primarily via
-# 5-fold out-of-fold (OOF) predictions over sinchon.xlsx alone -- unlike the internal/
+# Single-cohort (Gangnam-trained) Stage-1 -> Stage-2 pipeline, evaluated primarily via
+# 5-fold out-of-fold (OOF) predictions over gangnam.xlsx alone -- unlike the internal/
 # external cross-cohort transfer in stage2_model.py, this script's PRIMARY reported
-# result is Sinchon-on-Sinchon OOF, not a Sinchon->Gangnam transfer. main()'s final
+# result is Gangnam-on-Gangnam OOF, not a Gangnam->Sinchon transfer. main()'s final
 # section does additionally freeze the fitted Stage-1+Stage-2 artifacts and apply them
-# unchanged to Gangnam as a secondary external-transfer check (added 2026-07-24), but
+# unchanged to Sinchon as a secondary external-transfer check (added 2026-07-24), but
 # that's exploratory, not the primary result this script reports. Stage 1 (clinical-only
-# LR) is scored OOF over the whole Sinchon cohort (5-fold CV); only the patients its OOF score calls Positive
+# LR) is scored OOF over the whole Gangnam cohort (5-fold CV); only the patients its OOF score calls Positive
 # feed Stage 2, which -- unlike stage2_model.py's joint end-to-end late fusion -- is a
 # two-step stack: (1) a standalone 1D-CNN (AecCNN) takes only the AEC-128 curve and
 # outputs a low-SMI logit, scored OOF (5-fold CV) over the screen-positive subset;
@@ -21,12 +21,12 @@ from __future__ import annotations
 #
 # Reuses baseline (clinic-only_baseline.py) for Stage-1 LR + eval/plot utilities,
 # stage2_dataset._stage1_positive_rows for building the screen-positive clinic+AEC rows
-# (works for any meta/y/score/th over sinchon.xlsx, not just the internal cohort it was
+# (works for any meta/y/score/th over gangnam.xlsx, not just the internal cohort it was
 # originally written for), and stage2_model for threshold selection / NRI-McNemar
 # summary utilities (these are generic over any Stage-2 score, not specific to its
 # late-fusion model).
 #
-# Run: python code/sinchon_only_pipeline.py
+# Run: python code/gangnam_only_pipeline.py
 
 import copy
 import sys
@@ -52,9 +52,9 @@ stage2_model = import_module("stage2_model")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "sinchon_only_pipeline"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "gangnam_only_pipeline"
 
-SINCHON_XLSX = DATA_DIR / "sinchon.xlsx"
+GANGNAM_XLSX = DATA_DIR / "gangnam.xlsx"
 CLIN_COLS = stage2_dataset.CLIN_COLS
 AEC_COLS = stage2_dataset.AEC_COLS
 
@@ -98,7 +98,7 @@ def vendor_dummies(meta: pd.DataFrame) -> pd.DataFrame:
 def plot_confusion_matrix_custom(ax: Axes, result: dict, label: str) -> None:
     # Same drawing as baseline.plot_confusion_matrix, but with an explicit label
     # instead of that function's hardcoded internal/external cohort-name check --
-    # this script only ever has one cohort (Sinchon, 5-fold OOF).
+    # this script only ever has one cohort (Gangnam, 5-fold OOF).
     matrix = result["matrix"]
     ax.imshow(matrix, cmap="Blues", vmin=0, vmax=max(matrix.max(), 1))
     labels = [["TP", "FN"], ["FP", "TN"]]
@@ -394,35 +394,35 @@ def grid_search_stage2(x_aec_t: torch.Tensor, y2: np.ndarray, x_clin: np.ndarray
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # --- Stage 1: clinical-only LR, 5-fold OOF over the whole Sinchon cohort ---
-    meta, y = baseline.load_cohort(SINCHON_XLSX)
-    print(f"Sinchon cohort: n={len(y)} (event={int(y.sum())})")
+    # --- Stage 1: clinical-only LR, 5-fold OOF over the whole Gangnam cohort ---
+    meta, y = baseline.load_cohort(GANGNAM_XLSX)
+    print(f"Gangnam cohort: n={len(y)} (event={int(y.sum())})")
 
     x_raw = baseline.raw_clinical_matrix(meta)
     med, mu, sd = baseline.fit_clinical_standardizer(x_raw)
     x = baseline.apply_clinical_standardizer(x_raw, med, mu, sd)
     oof1 = baseline.oof_scores(x, y)
     th = baseline.threshold_for_sensitivity(y, oof1, baseline.TARGET_SENSITIVITY)
-    print(f"[Sinchon, S{int(baseline.TARGET_SENSITIVITY * 100)}, 5-fold OOF] threshold={th:.4f}")
+    print(f"[Gangnam, S{int(baseline.TARGET_SENSITIVITY * 100)}, 5-fold OOF] threshold={th:.4f}")
 
-    stage1_only = baseline.evaluate("sinchon (5-fold OOF)", y, oof1 >= th, th)
+    stage1_only = baseline.evaluate("gangnam (5-fold OOF)", y, oof1 >= th, th)
 
     fig, ax = plt.subplots(figsize=(6, 5.5))
-    plot_confusion_matrix_custom(ax, stage1_only, "Stage 1 only (Sinchon, 5-fold OOF)")
+    plot_confusion_matrix_custom(ax, stage1_only, "Stage 1 only (Gangnam, 5-fold OOF)")
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / "confusion_matrix_stage1_only.png", dpi=220)
     plt.close(fig)
 
     auc1 = baseline.auc_significance_stats(y, oof1)
     baseline.plot_roc_curve(y, oof1, auc1, OUTPUT_DIR / "roc_curve_stage1.png",
-                             title="Stage 1 (Clinical-only LR): ROC (Sinchon, 5-fold OOF)")
+                             title="Stage 1 (Clinical-only LR): ROC (Gangnam, 5-fold OOF)")
 
     # --- Stage-2 inputs: screen-positive (TP/FP) rows only, clinic + AEC-128, from
     # Stage-1's OOF score. _stage1_positive_rows only needs an xlsx path (for AEC lookup)
     # plus meta/y/score/th/x_std, so it works here exactly as it does for
     # stage2_dataset's internal cohort. ---
     stage1_rows_all, stage1_rows_pos, stage2_clin, stage2_aec = \
-        stage2_dataset._stage1_positive_rows(SINCHON_XLSX, meta, y, oof1, th, x)
+        stage2_dataset._stage1_positive_rows(GANGNAM_XLSX, meta, y, oof1, th, x)
 
     y2 = (stage1_rows_pos["group"] == "TP").to_numpy().astype(int)
     x_aec_t = torch.tensor(stage2_aec[AEC_COLS].to_numpy(dtype=np.float32))
@@ -449,7 +449,7 @@ def main() -> None:
     aec_cnn_oof, fold_loss_histories = aec_cnn_oof_scores(
         x_aec_t, y2, embed_dim=best_hp["embed_dim"], dropout=best_hp["dropout"], lr=best_hp["lr"])
     plot_fold_loss_curves(fold_loss_histories, OUTPUT_DIR / "loss_curve_aec_cnn.png",
-                           title="AEC-CNN (Stage-2 feature extractor): training loss vs. epoch (Sinchon, 5-fold OOF)")
+                           title="AEC-CNN (Stage-2 feature extractor): training loss vs. epoch (Gangnam, 5-fold OOF)")
 
     # --- Stage 2, step 2: final classifier (grid-search-selected model type +
     # hyperparameters) on 4 standardized clinical features + integer-coded scanner vendor +
@@ -469,26 +469,26 @@ def main() -> None:
     pos_mask = stage1_rows_all["group"].isin(["TP", "FP"]).to_numpy()
     th2 = stage2_model.choose_stage2_threshold(y_all, pos_mask, oof2, stage1_only["sens"], stage1_only["spec"])
 
-    result2 = baseline.evaluate("sinchon (5-fold OOF)", y2, oof2 >= th2, th2)
+    result2 = baseline.evaluate("gangnam (5-fold OOF)", y2, oof2 >= th2, th2)
 
     fig, ax = plt.subplots(figsize=(6, 5.5))
-    plot_confusion_matrix_custom(ax, result2, "Stage 2 only (Sinchon, 5-fold OOF)")
+    plot_confusion_matrix_custom(ax, result2, "Stage 2 only (Gangnam, 5-fold OOF)")
     fig.tight_layout()
     fig.savefig(OUTPUT_DIR / "confusion_matrix_stage2_only.png", dpi=220)
     plt.close(fig)
 
     auc2 = baseline.auc_significance_stats(y2, oof2)
     baseline.plot_roc_curve(y2, oof2, auc2, OUTPUT_DIR / "roc_curve_stage2.png",
-                             title=f"Stage 2 (AEC-CNN feature + {best_hp['final_model']}): ROC (Sinchon, 5-fold OOF)")
+                             title=f"Stage 2 (AEC-CNN feature + {best_hp['final_model']}): ROC (Gangnam, 5-fold OOF)")
 
     # --- Final pipeline (whole cohort, OOF): Stage-1 FN/TN (screen-negative, untouched)
     # + Stage-2's OOF reclassification of Stage-1 TP/FP (screen-positive). y_all/pos_mask
     # are the same masks final_pipeline_labels would derive from stage1_rows_all. ---
     pred_all = stage2_model.combine_predictions(pos_mask, oof2, th2)
-    result_final = baseline.evaluate("sinchon (5-fold OOF)", y_all, pred_all, th)
+    result_final = baseline.evaluate("gangnam (5-fold OOF)", y_all, pred_all, th)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
-    fig.suptitle("Sinchon (5-fold OOF): Stage 1 only vs. Full Pipeline (Stage 1 + Stage 2)", fontsize=13, fontweight="bold")
+    fig.suptitle("Gangnam (5-fold OOF): Stage 1 only vs. Full Pipeline (Stage 1 + Stage 2)", fontsize=13, fontweight="bold")
     plot_confusion_matrix_custom(axes[0], stage1_only, "Stage 1 only")
     plot_confusion_matrix_custom(axes[1], result_final, "Full pipeline")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -506,13 +506,13 @@ def main() -> None:
     auc_stage1_all = baseline.auc_significance_stats(y_all, stage1_score_all)
     auc_full = baseline.auc_significance_stats(y_all, full_score)
     delong = stage2_model.delong_paired_auc_test(y_all.astype(float), stage1_score_all, full_score)
-    print(f"[sinchon] Stage-1 AUC={auc_stage1_all['auc']:.3f} "
+    print(f"[gangnam] Stage-1 AUC={auc_stage1_all['auc']:.3f} "
           f"[{auc_stage1_all['ci_lower']:.3f}, {auc_stage1_all['ci_upper']:.3f}]  "
           f"Full-pipeline AUC={auc_full['auc']:.3f} [{auc_full['ci_lower']:.3f}, {auc_full['ci_upper']:.3f}]  "
           f"DeLong diff={delong['diff']:+.4f} p={delong['p_value']:.4f}")
 
     stage2_model.plot_stage1_vs_full_pipeline_roc([
-        {"label": "sinchon (5-fold OOF)", "y": y_all, "stage1_score": stage1_score_all, "stage1_auc": auc_stage1_all,
+        {"label": "gangnam (5-fold OOF)", "y": y_all, "stage1_score": stage1_score_all, "stage1_auc": auc_stage1_all,
          "full_score": full_score, "full_auc": auc_full, "delong_p": delong["p_value"]},
     ], OUTPUT_DIR / "roc_comparison_stage1_vs_full_pipeline.png")
 
@@ -521,49 +521,49 @@ def main() -> None:
     # test for Stage 2's effect -- see stage2_model.py's docstring for the rationale) ---
     ok = stage2_model.ni_pass_fail(stage1_only["sens"], result_final["sens"], stage1_only["spec"], result_final["spec"])
     sens_floor = stage1_only["sens"] * (1 - stage2_model.SENS_LOSS_RATIO_MARGIN)
-    print(f"[sinchon] sens: {stage1_only['sens']:.3f}->{result_final['sens']:.3f}  "
+    print(f"[gangnam] sens: {stage1_only['sens']:.3f}->{result_final['sens']:.3f}  "
           f"spec: {stage1_only['spec']:.3f}->{result_final['spec']:.3f}  "
           f"(sens floor={sens_floor:.3f}, margin={stage2_model.SENS_LOSS_RATIO_MARGIN:.0%} relative) -> "
           f"{'PASS' if ok else 'FAIL'}")
 
     pd.DataFrame([{
-        "cohort": "sinchon (5-fold OOF)", "sens_before": stage1_only["sens"], "sens_after": result_final["sens"],
+        "cohort": "gangnam (5-fold OOF)", "sens_before": stage1_only["sens"], "sens_after": result_final["sens"],
         "sens_floor": sens_floor, "spec_before": stage1_only["spec"], "spec_after": result_final["spec"],
         "pass": ok,
     }]).to_csv(OUTPUT_DIR / "final_pipeline_summary.csv", index=False)
 
     table_row = stage2_model.build_clinical_vs_aec_row(
-        "sinchon (5-fold OOF)", y_all, pos_mask, pred_all, stage1_only, result_final, auc2["auc"])
+        "gangnam (5-fold OOF)", y_all, pos_mask, pred_all, stage1_only, result_final, auc2["auc"])
     stage2_model.plot_clinical_vs_aec_table(
         [table_row], OUTPUT_DIR / "clinical_vs_aec_assisted_table.png",
-        f"clinical-only vs. AEC-assisted(AEC-CNN + {best_hp['final_model']}) 성능 비교 (Sinchon, 5-fold OOF)")
+        f"clinical-only vs. AEC-assisted(AEC-CNN + {best_hp['final_model']}) 성능 비교 (Gangnam, 5-fold OOF)")
     pd.DataFrame([table_row]).to_csv(OUTPUT_DIR / "clinical_vs_aec_assisted_summary.csv", index=False)
 
-    print("\n=== PRIMARY significance test: NRI / McNemar (reclassification), Sinchon 5-fold OOF ===")
+    print("\n=== PRIMARY significance test: NRI / McNemar (reclassification), Gangnam 5-fold OOF ===")
     r = table_row
     print(f"Net NRI={r['net_nri']:+d} (n={r['n']}, event={r['event']})  "
           f"sens: {r['sens_clin']:.3f}->{r['sens_aec']:.3f} (p={r['sens_p']:.4f})  "
           f"spec: {r['spec_clin']:.3f}->{r['spec_aec']:.3f} (p={r['spec_p']:.4f})  "
           f"acc: {r['acc_clin']:.3f}->{r['acc_aec']:.3f} (p={r['acc_p']:.4f})")
     print("=== Secondary: whole-curve AUC / DeLong ===")
-    print(f"[sinchon] DeLong p={delong['p_value']:.4f}")
+    print(f"[gangnam] DeLong p={delong['p_value']:.4f}")
 
-    # --- External transfer: freeze this Sinchon-trained Stage-1+Stage-2 pipeline
+    # --- External transfer: freeze this Gangnam-trained Stage-1+Stage-2 pipeline
     # (standardizer, Stage-1 LR, AEC-CNN ensemble, final classifier, both thresholds
-    # th/th2) and apply it unchanged to Gangnam -- same frozen-artifact-transfer
+    # th/th2) and apply it unchanged to Sinchon -- same frozen-artifact-transfer
     # pattern as stage2_dataset.build_stage2_inputs_external / stage2_model.py's
     # internal->external transfer, just for this script's stacked AEC-CNN + final-
     # classifier architecture instead of the joint late-fusion net. ---
-    GANGNAM_XLSX = DATA_DIR / "gangnam.xlsx"
-    meta_ext, y_ext_all = baseline.load_cohort(GANGNAM_XLSX)
+    SINCHON_XLSX = DATA_DIR / "sinchon.xlsx"
+    meta_ext, y_ext_all = baseline.load_cohort(SINCHON_XLSX)
     x_raw_ext = baseline.raw_clinical_matrix(meta_ext)
     x_ext = baseline.apply_clinical_standardizer(x_raw_ext, med, mu, sd)
     stage1_model = baseline.fit_baseline_model(x, y)
     score1_ext = stage1_model.decision_function(x_ext)
-    stage1_only_ext = baseline.evaluate("gangnam (external, frozen sinchon Stage-1)", y_ext_all, score1_ext >= th, th)
+    stage1_only_ext = baseline.evaluate("sinchon (external, frozen gangnam Stage-1)", y_ext_all, score1_ext >= th, th)
 
     stage1_rows_all_ext, stage1_rows_pos_ext, stage2_clin_ext, stage2_aec_ext = \
-        stage2_dataset._stage1_positive_rows(GANGNAM_XLSX, meta_ext, y_ext_all, score1_ext, th, x_ext)
+        stage2_dataset._stage1_positive_rows(SINCHON_XLSX, meta_ext, y_ext_all, score1_ext, th, x_ext)
 
     y2_ext = (stage1_rows_pos_ext["group"] == "TP").to_numpy().astype(int)
     x_aec_ext_t = torch.tensor(stage2_aec_ext[AEC_COLS].to_numpy(dtype=np.float32))
@@ -586,31 +586,31 @@ def main() -> None:
     y_all_ext = stage1_rows_all_ext["group"].isin(["TP", "FN"]).to_numpy().astype(int)
     pos_mask_ext = stage1_rows_all_ext["group"].isin(["TP", "FP"]).to_numpy()
     pred_all_ext = stage2_model.combine_predictions(pos_mask_ext, oof2_ext, th2)
-    result_final_ext = baseline.evaluate("gangnam (external, frozen sinchon pipeline)", y_all_ext, pred_all_ext, th)
+    result_final_ext = baseline.evaluate("sinchon (external, frozen gangnam pipeline)", y_all_ext, pred_all_ext, th)
 
     ext_auc = float(roc_auc_score(y2_ext, oof2_ext)) if len(np.unique(y2_ext)) > 1 else float("nan")
     table_row_ext = stage2_model.build_clinical_vs_aec_row(
-        "gangnam (external, frozen sinchon model)", y_all_ext, pos_mask_ext, pred_all_ext,
+        "sinchon (external, frozen gangnam model)", y_all_ext, pos_mask_ext, pred_all_ext,
         stage1_only_ext, result_final_ext, ext_auc)
     pd.DataFrame([table_row_ext]).to_csv(OUTPUT_DIR / "clinical_vs_aec_assisted_external_summary.csv", index=False)
 
-    print("\n=== EXTERNAL transfer: Gangnam, frozen Sinchon-trained pipeline ===")
+    print("\n=== EXTERNAL transfer: Sinchon, frozen Gangnam-trained pipeline ===")
     re = table_row_ext
     print(f"Net NRI={re['net_nri']:+d} (n={re['n']}, event={re['event']})  "
           f"sens: {re['sens_clin']:.3f}->{re['sens_aec']:.3f} (p={re['sens_p']:.4f})  "
           f"spec: {re['spec_clin']:.3f}->{re['spec_aec']:.3f} (p={re['spec_p']:.4f})  "
           f"acc: {re['acc_clin']:.3f}->{re['acc_aec']:.3f} (p={re['acc_p']:.4f})")
 
-    # --- Whole-cohort Stage-1-only vs. full-pipeline AUC on the EXTERNAL (Gangnam)
-    # cohort, same DeLong-paired methodology as the internal (Sinchon) comparison
-    # above -- checks whether the frozen Sinchon-trained pipeline's AUC gain over
-    # its own frozen Stage-1 is significant on Gangnam, not just spec/NRI at one
+    # --- Whole-cohort Stage-1-only vs. full-pipeline AUC on the EXTERNAL (Sinchon)
+    # cohort, same DeLong-paired methodology as the internal (Gangnam) comparison
+    # above -- checks whether the frozen Gangnam-trained pipeline's AUC gain over
+    # its own frozen Stage-1 is significant on Sinchon, not just spec/NRI at one
     # operating point. ---
     full_score_ext = stage2_model.combine_full_pipeline_score(score1_ext, pos_mask_ext, oof2_ext, th)
     auc_stage1_ext = baseline.auc_significance_stats(y_ext_all, score1_ext)
     auc_full_ext = baseline.auc_significance_stats(y_ext_all, full_score_ext)
     delong_ext = stage2_model.delong_paired_auc_test(y_ext_all.astype(float), score1_ext, full_score_ext)
-    print(f"[gangnam, external, frozen sinchon pipeline] Stage-1 AUC={auc_stage1_ext['auc']:.3f} "
+    print(f"[sinchon, external, frozen gangnam pipeline] Stage-1 AUC={auc_stage1_ext['auc']:.3f} "
           f"[{auc_stage1_ext['ci_lower']:.3f}, {auc_stage1_ext['ci_upper']:.3f}]  "
           f"Full-pipeline AUC={auc_full_ext['auc']:.3f} [{auc_full_ext['ci_lower']:.3f}, {auc_full_ext['ci_upper']:.3f}]  "
           f"DeLong diff={delong_ext['diff']:+.4f} p={delong_ext['p_value']:.4f}")
