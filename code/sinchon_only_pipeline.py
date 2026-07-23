@@ -8,8 +8,9 @@ from __future__ import annotations
 # feed Stage 2, which -- unlike stage2_model.py's joint end-to-end late fusion -- is a
 # two-step stack: (1) a standalone 1D-CNN (AecCNN) takes only the AEC-128 curve and
 # outputs a low-SMI logit, scored OOF (5-fold CV) over the screen-positive subset;
-# (2) that AEC-CNN OOF score is added as a 5th feature alongside the 4 standardized
-# clinical variables (sex_m, age_std, height_std, weight_std) into a final classifier,
+# (2) that AEC-CNN OOF score is added as a final feature alongside the 4 standardized
+# clinical variables (sex_m, age_std, height_std, weight_std) and a single integer-coded
+# scanner-vendor feature (see VENDOR_MAP/VENDOR_ORDER/vendor_dummies) into a final classifier,
 # itself scored OOF (another 5-fold CV) for the final Stage-2 prediction. grid_search_stage2
 # tunes the AEC-CNN's hyperparameters and picks this final classifier's model type
 # (logistic regression / random forest / gradient boosting / SVM-RBF) + hyperparameters
@@ -53,6 +54,42 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "sinchon_only_pipeline"
 SINCHON_XLSX = DATA_DIR / "sinchon.xlsx"
 CLIN_COLS = stage2_dataset.CLIN_COLS
 AEC_COLS = stage2_dataset.AEC_COLS
+
+# Same Manufacturer->Vendor mapping as code/baseline/aec_curve_comparison*.py, reused
+# here so the final Stage-2 classifier can see scanner vendor as a feature (not just as
+# a plotting facet) -- Manufacturer string is a device model, not a vendor, so it must
+# be collapsed first (many-to-one) before it's usable as a low-cardinality feature.
+VENDOR_MAP = {
+    "Sensation 64": "Siemens",
+    "SOMATOM Definition AS+": "Siemens",
+    "SOMATOM Definition Edge": "Siemens",
+    "SOMATOM Definition": "Siemens",
+    "SOMATOM Definition Flash": "Siemens",
+    "SOMATOM Force": "Siemens",
+    "SOMATOM Drive": "Siemens",
+    "SOMATOM go.Top": "Siemens",
+    "Revolution CT": "GE",
+    "Revolution EVO": "GE",
+    "Revolution Frontier": "GE",
+    "Optima CT660": "GE",
+    "LightSpeed VCT": "GE",
+    "Discovery CT750 HD": "GE",
+    "Ingenuity Core 128": "Philips",
+    "iCT 256": "Philips",
+    "Aquilion ONE": "Canon",
+    "Aquilion": "Canon",
+}
+VENDOR_ORDER = ["Siemens", "GE", "Philips", "Canon", "Other"]  # -> single integer code 0-4,
+                                                                 # "Other" for any unmapped Manufacturer
+
+
+def vendor_dummies(meta: pd.DataFrame) -> pd.DataFrame:
+    # Single integer-coded vendor column (0-4, see VENDOR_ORDER) rather than one-hot
+    # dummies -- one feature instead of one-per-vendor.
+    vendor = meta["Manufacturer"].map(VENDOR_MAP).fillna("Other")
+    code_map = {name: float(i) for i, name in enumerate(VENDOR_ORDER)}
+    vendor_code = vendor.map(code_map).to_numpy()
+    return pd.DataFrame({"PatientID": meta["PatientID"].to_numpy(), "vendor_code": vendor_code})
 
 
 def plot_confusion_matrix_custom(ax: Axes, result: dict, label: str) -> None:
@@ -221,10 +258,10 @@ def aec_cnn_oof_scores(x_aec: torch.Tensor, y: np.ndarray, embed_dim: int = 16, 
 
 
 def _make_final_model(name: str, params: dict, seed: int):
-    # Candidate final-stage classifiers for the 5-feature (4 clinical + AEC-CNN score)
-    # input -- logreg is stage2_model.py-style linear, the rest are added so the grid
-    # search can check whether a nonlinear/tree-based model reads this small (5-dim)
-    # feature set better than a linear one.
+    # Candidate final-stage classifiers for the final feature input (4 clinical + vendor
+    # dummies + AEC-CNN score, see vendor_dummies/main) -- logreg is stage2_model.py-style
+    # linear, the rest are added so the grid search can check whether a nonlinear/
+    # tree-based model reads this small feature set better than a linear one.
     if name == "logreg":
         return LogisticRegression(C=params["C"], solver="lbfgs", max_iter=5000, random_state=seed)
     if name == "random_forest":
@@ -273,15 +310,15 @@ FINAL_MODEL_GRID: dict[str, list[dict]] = {
 GRID_SEARCH_ENSEMBLE_SEEDS = 1  # cheaper than the reported run's N_ENSEMBLE_SEEDS=5 -- only for ranking configs
 
 
-def grid_search_stage2(x_aec_t: torch.Tensor, y2: np.ndarray, x_clin_4: np.ndarray, out_dir: Path) -> dict:
+def grid_search_stage2(x_aec_t: torch.Tensor, y2: np.ndarray, x_clin: np.ndarray, out_dir: Path) -> dict:
     # Two-phase (coordinate) search, not one joint grid over every knob -- that keeps
     # the expensive part (CNN training) to len(AEC_CNN_GRID) combos instead of
     # combos*len(all final-model hyperparameter combos). Phase 1 ranks AEC-CNN configs
     # by the CNN's OWN OOF AUC (decoupled from the final classifier); phase 2 fixes the
     # winning CNN config and compares final-classifier model TYPES (logreg / random
     # forest / gradient boosting / SVM-RBF), not just logreg's C, over the resulting
-    # 5-feature matrix (cheap regardless of model type -- sklearn fits on n~490, 5
-    # features). Scored with plain roc_auc_score (no bootstrap CI) since this only
+    # feature matrix (cheap regardless of model type -- sklearn fits on n~490, single-
+    # digit feature count). Scored with plain roc_auc_score (no bootstrap CI) since this only
     # needs to RANK configs; main() reruns the winner at full N_ENSEMBLE_SEEDS with the
     # full auc_significance_stats for the reported result.
     print("\n=== Grid search (phase 1): AEC-CNN hyperparameters (own OOF AUC, "
@@ -306,7 +343,7 @@ def grid_search_stage2(x_aec_t: torch.Tensor, y2: np.ndarray, x_clin_4: np.ndarr
     print("\n=== Grid search (phase 2): final classifier model + hyperparameters (fixed AEC-CNN config) ===")
     oof_cnn, _ = aec_cnn_oof_scores(x_aec_t, y2, n_ensemble_seeds=GRID_SEARCH_ENSEMBLE_SEEDS, **best_cnn)
     aec_mean, aec_std = stage2_model.fit_score_standardizer(oof_cnn)
-    x_final = np.column_stack([x_clin_4, (oof_cnn - aec_mean) / aec_std])
+    x_final = np.column_stack([x_clin, (oof_cnn - aec_mean) / aec_std])
     best_final_trial = None
     for name, param_grid in FINAL_MODEL_GRID.items():
         for params in param_grid:
@@ -359,12 +396,21 @@ def main() -> None:
 
     y2 = (stage1_rows_pos["group"] == "TP").to_numpy().astype(int)
     x_aec_t = torch.tensor(stage2_aec[AEC_COLS].to_numpy(dtype=np.float32))
-    x_clin_4 = stage2_clin[CLIN_COLS].to_numpy(dtype=np.float64)
+
+    # Scanner vendor as an extra final-classifier feature (see vendor_dummies) -- merged
+    # onto the screen-positive subset by PatientID rather than re-deriving the Stage-1
+    # positive mask, since stage2_clin/stage1_rows_pos are already row-aligned to it.
+    vendor_df = vendor_dummies(meta)
+    vendor_cols = [c for c in vendor_df.columns if c != "PatientID"]
+    stage2_clin = stage2_clin.merge(vendor_df, on="PatientID", how="left")
+    assert not stage2_clin[vendor_cols].isna().any().any()
+    x_clin = stage2_clin[CLIN_COLS + vendor_cols].to_numpy(dtype=np.float64)
+    print(f"Stage-2 clinical features: {CLIN_COLS + vendor_cols}")
 
     # --- Grid search over the AEC-CNN's hyperparameters and the final classifier's
     # model type + hyperparameters (logreg/random_forest/gradient_boosting/svm_rbf),
     # ranked by OOF AUC (see grid_search_stage2's docstring for the two-phase design).
-    best_hp = grid_search_stage2(x_aec_t, y2, x_clin_4, OUTPUT_DIR)
+    best_hp = grid_search_stage2(x_aec_t, y2, x_clin, OUTPUT_DIR)
     print(f"\n=== Using grid-search-selected hyperparameters for the reported Stage-2 run: {best_hp} ===")
 
     # --- Stage 2, step 1: standalone AEC-only 1D-CNN (grid-search-selected hyperparameters,
@@ -376,8 +422,8 @@ def main() -> None:
                            title="AEC-CNN (Stage-2 feature extractor): training loss vs. epoch (Sinchon, 5-fold OOF)")
 
     # --- Stage 2, step 2: final classifier (grid-search-selected model type +
-    # hyperparameters) on 4 standardized clinical features + the AEC-CNN's OOF score
-    # (5 features total), itself scored 5-fold OOF (final_model_oof_scores -- always a
+    # hyperparameters) on 4 standardized clinical features + integer-coded scanner vendor +
+    # the AEC-CNN's OOF score, itself scored 5-fold OOF (final_model_oof_scores -- always a
     # [0,1] probability regardless of model type, see that function's docstring). th2
     # is chosen (NI test vs. stage-1-only) on this OOF score, same selection rule as
     # stage2_model.py. The AEC-CNN's raw sigmoid output is standardized first -- same
@@ -386,7 +432,7 @@ def main() -> None:
     # would leave tree-based/linear models alike (over)weighting one feature group. ---
     aec_mean, aec_std = stage2_model.fit_score_standardizer(aec_cnn_oof)
     aec_cnn_oof_std = (aec_cnn_oof - aec_mean) / aec_std
-    x_final = np.column_stack([x_clin_4, aec_cnn_oof_std])
+    x_final = np.column_stack([x_clin, aec_cnn_oof_std])
     oof2 = final_model_oof_scores(best_hp["final_model"], best_hp["final_params"], x_final, y2)
 
     y_all = stage1_rows_all["group"].isin(["TP", "FN"]).to_numpy().astype(int)

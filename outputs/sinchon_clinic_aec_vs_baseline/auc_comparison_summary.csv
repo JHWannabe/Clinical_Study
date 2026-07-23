@@ -1,2 +1,0 @@
-cohort,n,event,auc_baseline,auc_baseline_ci_lower,auc_baseline_ci_upper,auc_clinic_aec,auc_clinic_aec_ci_lower,auc_clinic_aec_ci_upper,delong_diff,delong_z,delong_p_value,final_model,final_params
-"sinchon (whole cohort, 5-fold OOF)",926,141,0.8316031982653477,0.7946835614581921,0.8648518317748565,0.8300763427745402,0.7930961738266251,0.8635420336992365,0.0015268554908073328,0.8760222487437145,0.3810179387255527,logreg,{'C': 1.0}
