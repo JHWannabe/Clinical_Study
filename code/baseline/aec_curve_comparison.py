@@ -9,8 +9,8 @@ AEC 프로파일)를 이용해 성별 / 나이 / TAMA / BMI / Height / Weight �
 - 그룹별 정규화 곡선을 슬라이스 index(1~128)마다 평균 + 95% CI로 겹쳐 그린다.
 - 연속형 변수 중 TAMA/BMI는 남/여 각각의 median 기준 상/하 2그룹으로 나눈다
   (체격 지표라 성별에 따라 분포 자체가 다르므로 전체 median 하나로 나누면
-  그룹이 성별과 뒤섞임). 그 외 연속형 변수(Age/Height/Weight/ScanLength/
-  SliceThickness)는 전체 데이터셋의 median 기준 상/하 2그룹으로 나눈다.
+  그룹이 성별과 뒤섞임). 그 외 연속형 변수(Age/Height/Weight)는 전체
+  데이터셋의 median 기준 상/하 2그룹으로 나눈다.
 - 레거시 파이프라인(main_aec_full_derivation_pipeline_simplified.py 등)은
   재사용하지 않고 이 스크립트에서 새로 계산한다.
 """
@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.optimize import linear_sum_assignment
+from sklearn.linear_model import LogisticRegression
 
 plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
@@ -121,15 +123,13 @@ def load_data(data_path):
 
     norm_df = pd.DataFrame(norm_curves, columns=AEC_COLS)
     norm_df.insert(0, "PatientID", aec["PatientID"].to_numpy())
-    norm_df["z_range"] = aec["z_range"].values
-    norm_df["n_slices_cropped"] = aec["n_slices_cropped"].values
 
     df = meta.merge(norm_df, on="PatientID", how="inner")
 
     df["AgeGroup2"] = overall_median_group2(df, "PatientAge")
     for col in ["TAMA", "BMI"]:
         df[f"{col}Group2"] = sex_median_group2(df, col)
-    for col in ["Height", "Weight", "z_range"]:
+    for col in ["Height", "Weight"]:
         df[f"{col}Group2"] = overall_median_group2(df, col)
 
     # SMI is recomputed from TAMA/Height (not read from the metadata sheet's own
@@ -143,9 +143,6 @@ def load_data(data_path):
     df["LowSMI"] = np.where(smi < cutoff, "Low SMI", "Non-low SMI")
 
     df["Vendor"] = df["Manufacturer"].map(VENDOR_MAP)
-
-    df["SliceThickness"] = df["z_range"] / df["n_slices_cropped"]
-    df["SliceThicknessGroup2"] = overall_median_group2(df, "SliceThickness")
 
     bmi_bins = [0, 18.5, 23, 25, 100]
     bmi_labels = ["Underweight", "Normal", "Overweight", "Obese"]
@@ -161,44 +158,51 @@ def smooth(mat_mean, window=5):
     return s.rolling(window=window, center=True, min_periods=1).mean().to_numpy()
 
 
-def group_curve_stats(df, group_col, group_val):
-    sub = df.loc[df[group_col] == group_val, AEC_COLS].to_numpy()
+def group_curve_stats(df, group_col, group_val, cols=None):
+    cols = list(cols) if cols is not None else AEC_COLS
+    sub = df.loc[df[group_col] == group_val, cols].to_numpy()
     mean = sub.mean(axis=0)
     sem = stats.sem(sub, axis=0)
     ci = 1.96 * sem
     return smooth(mean), smooth(ci), len(sub)
 
 
-def plot_curve_comparison(ax, df, group_col, order, labels, colors, title):
-    x = np.arange(1, N_SLICES + 1)
+def plot_curve_comparison(ax, df, group_col, order, labels, colors, title,
+                           ylabel="Patient-normalized AEC", ref_line=1.0, cols=None):
+    cols = list(cols) if cols is not None else AEC_COLS
+    x = np.array([int(c.split("_")[1]) for c in cols])
     for val, label, color in zip(order, labels, colors):
-        mean, ci, n = group_curve_stats(df, group_col, val)
+        mean, ci, n = group_curve_stats(df, group_col, val, cols=cols)
         ax.plot(x, mean, color=color, linewidth=2, label=f"{label} (n={n})")
         ax.fill_between(x, mean - ci, mean + ci, color=color, alpha=0.18, linewidth=0)
-    ax.axhline(1.0, color=INK_MUTED, linewidth=1, linestyle="--")
-    ax.set_xlim(1, N_SLICES)
+    ax.axhline(ref_line, color=INK_MUTED, linewidth=1, linestyle="--")
+    ax.set_xlim(x.min(), x.max())
     ax.set_xlabel("Slice index (1-128, resampled)")
-    ax.set_ylabel("Patient-normalized AEC")
+    ax.set_ylabel(ylabel)
     ax.set_title(title, color=INK_PRIMARY, fontsize=11)
     ax.legend(frameon=False, fontsize=8, labelcolor=INK_SECONDARY, loc="best")
     style_axes(ax)
 
 
-def curve_diff_test(df, group_col, order, labels, n_perm=2000, seed=42):
-    """128 슬라이스를 개별 포인트로 따로따로 검정하지 않고, 곡선 전체를 하나의 벡터로 보고
-    그룹 간 차이를 정량화한다.
+def curve_diff_test(df, group_col, order, labels, n_perm=2000, seed=42, cols=None):
+    """128 슬라이스를 개별 포인트로 따로따로 검정하지 않고, 곡선(또는 곡선의 부분구간)을
+    하나의 벡터로 보고 그룹 간 차이를 정량화한다. cols를 지정하면 전체 128슬라이스 대신
+    그 부분집합(예: peak_slice 주변 구간)을 하나의 sub-curve로 취급해 같은 방식으로
+    검정한다 -- 슬라이스를 독립된 포인트로 쪼개서 보지 않는다는 원칙은 구간 단위에서도 유지.
 
     환자별로 자기 자신의 평균으로 정규화했기 때문에 patient-mean AEC(128슬라이스 평균)는
     모든 환자에서 항상 정확히 1.0이 되어(구성상 자명) 그룹 간 비교 대상이 될 수 없다.
-    대신 두 그룹의 평균곡선(길이 128 벡터) 사이의 RMSD(root-mean-square deviation,
-    슬라이스 전체에 걸친 평균적 곡선 간 거리 - 2그룹 기준. 3그룹 이상은 슬라이스별
-    그룹평균 간 분산을 전체 슬라이스에 대해 평균한 값)를 하나의 전역 검정통계량으로 삼고,
+    대신 두 그룹의 평균곡선(길이 len(cols) 벡터) 사이의 RMSD(root-mean-square deviation,
+    구간 전체에 걸친 평균적 곡선 간 거리 - 2그룹 기준. 3그룹 이상은 슬라이스별
+    그룹평균 간 분산을 구간 전체에 대해 평균한 값)를 하나의 전역 검정통계량으로 삼고,
     그룹 라벨을 섞는 permutation test로 그 거리가 우연 수준을 넘는지 검정한다.
     peak_slice/peak_deviation은 어디서 가장 크게 벌어지는지 보여주는 참고 정보일 뿐,
-    검정 자체는 곡선 전체(RMSD)를 기준으로 한다.
+    검정 자체는 구간 전체(RMSD)를 기준으로 한다.
     """
+    cols = list(cols) if cols is not None else AEC_COLS
+    slice_nums = [int(c.split("_")[1]) for c in cols]
     sub = df[df[group_col].isin(order)]
-    mat = sub[AEC_COLS].to_numpy()
+    mat = sub[cols].to_numpy()
     labels_arr = sub[group_col].to_numpy()
     ns = [int((labels_arr == v).sum()) for v in order]
 
@@ -228,7 +232,7 @@ def curve_diff_test(df, group_col, order, labels, n_perm=2000, seed=42):
         "groups": "; ".join(f"{lab} (n={n})" for lab, n in zip(labels, ns)),
         "test": "whole-curve RMSD permutation",
         "curve_rmsd": obs_stat,
-        "peak_slice": peak_idx + 1,
+        "peak_slice": slice_nums[peak_idx],
         "peak_deviation": float(obs_deviation[peak_idx]),
         "direction": direction,
         "n_perm": n_perm,
@@ -239,6 +243,88 @@ def curve_diff_test(df, group_col, order, labels, n_perm=2000, seed=42):
 def curve_diff_note(r):
     return (f"curve RMSD={r['curve_rmsd']:.4f}, perm p={r['p_value']:.3g} "
             f"(n_perm={r['n_perm']}; peak Δ={r['peak_deviation']:.3f} @ slice {r['peak_slice']})")
+
+
+# 전체 곡선 permutation test(curve_diff_test)의 peak_slice를 중심으로 한 구간(sub-curve)만
+# 잘라 같은 RMSD permutation test를 다시 돌린다. 128포인트를 임의로 등분(4등분/3등분)하는
+# 대신, 이미 전체곡선 비교에서 그룹 차이가 가장 크게 나타난 지점을 기준으로 구간을 정의한다.
+PEAK_WINDOW_HALFWIDTH = 10  # peak_slice 기준 좌우 슬라이스 수
+
+
+def peak_window_cols(peak_slice, halfwidth=PEAK_WINDOW_HALFWIDTH):
+    lo = max(1, peak_slice - halfwidth)
+    hi = min(N_SLICES, peak_slice + halfwidth)
+    return [f"aec_{i}" for i in range(lo, hi + 1)], lo, hi
+
+
+# ------------------------------------------------------- propensity matching --
+# 07(단순 median/cutoff 분할)은 Low-SMI 여부와 성별/나이/키/몸무게가 서로 얽혀 있을 때
+# 그 얽힘을 통제하지 못한다. 07b는 같은 두 그룹을 stage2_dataset.CLIN_COLS와 동일한
+# 정의(sex_m/age_std/height_std/weight_std)로 propensity score를 추정하고, TP vs FP
+# 비교(code/0723/stage2_aec_group_comparisons.py)와 동일한 Hungarian 최적 1:1 caliper
+# matching으로 공변량을 맞춘 뒤 재비교한다.
+PSM_COVARIATES = ["sex_m", "age_std", "height_std", "weight_std"]
+CALIPER_MULT = 0.2
+PSM_SEED = 42
+
+
+def build_psm_covariates(df):
+    out = pd.DataFrame(index=df.index)
+    out["sex_m"] = (df["PatientSex"].astype(str).str.upper() == "M").astype(float)
+    for col, std_col in [("PatientAge", "age_std"), ("Height", "height_std"), ("Weight", "weight_std")]:
+        x = df[col].astype(float)
+        out[std_col] = (x - x.mean()) / x.std(ddof=1)
+    return out
+
+
+def fit_propensity(clin_df, group, treat_val):
+    x = clin_df[PSM_COVARIATES].to_numpy()
+    y = (group.to_numpy() == treat_val).astype(int)
+    model = LogisticRegression(C=1.0, solver="lbfgs", max_iter=5000, random_state=PSM_SEED)
+    model.fit(x, y)
+    return model.predict_proba(x)[:, 1]
+
+
+def optimal_caliper_match(group, ps, treat_val):
+    # treat_val 그룹 전체와 나머지 그룹 사이의 총 logit(propensity) 거리를 최소화하는 전역
+    # 최적 1:1 할당(Hungarian algorithm)을 구한 뒤, caliper를 넘는 쌍만 사후에 버린다.
+    eps = 1e-6
+    logit_ps = np.log(np.clip(ps, eps, 1 - eps) / np.clip(1 - ps, eps, 1 - eps))
+    caliper = CALIPER_MULT * logit_ps.std(ddof=1)
+
+    is_treat = (group.to_numpy() == treat_val)
+    treat_idx = np.where(is_treat)[0]
+    control_idx = np.where(~is_treat)[0]
+
+    cost = np.abs(logit_ps[treat_idx][:, None] - logit_ps[control_idx][None, :])
+    row_ind, col_ind = linear_sum_assignment(cost)
+
+    matched_pairs = [(treat_idx[r], control_idx[c]) for r, c in zip(row_ind, col_ind) if cost[r, c] <= caliper]
+    matched_idx = np.array(sorted(i for pair in matched_pairs for i in pair))
+    print(f"  matched pairs: {len(matched_pairs)} / {treat_val} total {len(treat_idx)} "
+          f"(caliper={caliper:.4f} logit-units, optimal assignment)")
+    return matched_idx
+
+
+def smd(x, treat_mask):
+    a, b = x[treat_mask], x[~treat_mask]
+    pooled_sd = np.sqrt((a.var(ddof=1) + b.var(ddof=1)) / 2)
+    return float((a.mean() - b.mean()) / pooled_sd) if pooled_sd > 0 else 0.0
+
+
+def psm_balance_table(clin_df, group, treat_val, matched_idx):
+    treat_mask_all = (group.to_numpy() == treat_val)
+    treat_mask_matched = treat_mask_all[matched_idx]
+    rows = []
+    for col in PSM_COVARIATES:
+        x_all = clin_df[col].to_numpy()
+        x_matched = x_all[matched_idx]
+        rows.append({
+            "covariate": col,
+            "smd_before": smd(x_all, treat_mask_all),
+            "smd_after": smd(x_matched, treat_mask_matched),
+        })
+    return pd.DataFrame(rows)
 
 
 def run_cohort(cohort):
@@ -264,25 +350,84 @@ def run_cohort(cohort):
          "04_aec_curve_by_bmi.png", "BMI(성별 median 분할)에 따른 AEC 곡선 비교"),
         ("LowSMI", ["Low SMI", "Non-low SMI"], ["Low SMI", "Non-low SMI"],
          "07_aec_curve_by_low_smi.png", "Low-SMI 임상 cutoff에 따른 AEC 곡선 비교"),
-        ("z_rangeGroup2", ["Low", "High"], ["Scan length ≤ median", "Scan length > median"],
-         "08_aec_curve_by_scan_length.png", "스캔 커버리지 길이(z_range, median 분할)에 따른 AEC 곡선 비교"),
-        ("SliceThicknessGroup2", ["Low", "High"], ["Slice thickness ≤ median", "Slice thickness > median"],
-         "09_aec_curve_by_slice_thickness.png", "재구성 슬라이스 두께(median 분할)에 따른 AEC 곡선 비교"),
     ]
 
     two_group_colors = [COL_A, COL_B]
     summary_rows = []
 
     # 개별 그래프 (2그룹 비교)
+    r_lowsmi_full = None
     for group_col, order, labels, fname, title_kr in specs:
         fig, ax = plt.subplots(figsize=(8, 5.5))
         plot_curve_comparison(ax, df, group_col, order, labels, two_group_colors, title_kr)
         r = curve_diff_test(df, group_col, order, labels)
+        if group_col == "LowSMI":
+            r_lowsmi_full = r
         summary_rows.append({"figure": fname, "comparison": title_kr, **r})
         ax.text(0.02, 0.02, curve_diff_note(r),
                 transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
         fig.tight_layout()
         savefig(fig, out_dir, fname)
+
+    # 07b: Low-SMI, propensity score matching (성별/나이/키/몸무게 균형 후 재비교)
+    clin_df = build_psm_covariates(df)
+    smi_group = df["LowSMI"]
+    ps = fit_propensity(clin_df, smi_group, "Low SMI")
+    matched_idx = optimal_caliper_match(smi_group, ps, "Low SMI")
+
+    bal = psm_balance_table(clin_df, smi_group, "Low SMI", matched_idx)
+    bal_path = os.path.join(out_dir, "07b_aec_curve_by_low_smi_matched_balance.csv")
+    bal.to_csv(bal_path, index=False, encoding="utf-8-sig")
+    print(f"[{cohort}] Low-SMI PSM covariate balance (SMD):\n{bal.to_string(index=False)}")
+    print(f"saved: {bal_path}")
+
+    df_matched = df.iloc[matched_idx].reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    plot_curve_comparison(ax, df_matched, "LowSMI", ["Low SMI", "Non-low SMI"], ["Low SMI", "Non-low SMI"],
+                          two_group_colors, "Low-SMI 임상 cutoff에 따른 AEC 곡선 비교 (propensity-matched)")
+    r_psm = curve_diff_test(df_matched, "LowSMI", ["Low SMI", "Non-low SMI"], ["Low SMI", "Non-low SMI"])
+    r_psm["n_matched_pairs"] = len(matched_idx) // 2
+    summary_rows.append({"figure": "07b_aec_curve_by_low_smi_matched.png",
+                          "comparison": "Low-SMI cutoff (propensity-matched)", **r_psm})
+    ax.text(0.02, 0.02, f"{curve_diff_note(r_psm)}\n(matched pairs={r_psm['n_matched_pairs']})",
+            transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
+    fig.tight_layout()
+    savefig(fig, out_dir, "07b_aec_curve_by_low_smi_matched.png")
+
+    # 07c: Low-SMI(비매칭), 전체 곡선 permutation test의 peak_slice 주변 구간 확대 비교
+    lowsmi_order = ["Low SMI", "Non-low SMI"]
+    lowsmi_labels = ["Low SMI", "Non-low SMI"]
+    win_cols, win_lo, win_hi = peak_window_cols(r_lowsmi_full["peak_slice"])
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    plot_curve_comparison(ax, df, "LowSMI", lowsmi_order, lowsmi_labels, two_group_colors,
+                          f"Low-SMI AEC 곡선 비교 - peak 구간 확대 (slice {win_lo}-{win_hi})",
+                          cols=win_cols)
+    r_win = curve_diff_test(df, "LowSMI", lowsmi_order, lowsmi_labels, cols=win_cols)
+    summary_rows.append({"figure": "07c_aec_curve_by_low_smi_peak_window.png",
+                          "comparison": f"Low-SMI cutoff, peak 구간 (slice {win_lo}-{win_hi})", **r_win})
+    ax.text(0.02, 0.02,
+            f"{curve_diff_note(r_win)}\n(전체 곡선 peak={r_lowsmi_full['peak_slice']} 기준 ±{PEAK_WINDOW_HALFWIDTH}슬라이스)",
+            transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
+    fig.tight_layout()
+    savefig(fig, out_dir, "07c_aec_curve_by_low_smi_peak_window.png")
+
+    # 07d: Low-SMI(propensity-matched), peak_slice 주변 구간 확대 비교
+    win_cols_m, win_lo_m, win_hi_m = peak_window_cols(r_psm["peak_slice"])
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    plot_curve_comparison(ax, df_matched, "LowSMI", lowsmi_order, lowsmi_labels, two_group_colors,
+                          f"Low-SMI AEC 곡선 비교(propensity-matched) - peak 구간 확대 (slice {win_lo_m}-{win_hi_m})",
+                          cols=win_cols_m)
+    r_win_m = curve_diff_test(df_matched, "LowSMI", lowsmi_order, lowsmi_labels, cols=win_cols_m)
+    r_win_m["n_matched_pairs"] = len(matched_idx) // 2
+    summary_rows.append({"figure": "07d_aec_curve_by_low_smi_matched_peak_window.png",
+                          "comparison": f"Low-SMI cutoff (propensity-matched), peak 구간 (slice {win_lo_m}-{win_hi_m})",
+                          **r_win_m})
+    ax.text(0.02, 0.02,
+            f"{curve_diff_note(r_win_m)}\n(matched pairs={r_win_m['n_matched_pairs']}; "
+            f"matched 전체곡선 peak={r_psm['peak_slice']} 기준 ±{PEAK_WINDOW_HALFWIDTH}슬라이스)",
+            transform=ax.transAxes, fontsize=8, color=INK_MUTED, va="bottom")
+    fig.tight_layout()
+    savefig(fig, out_dir, "07d_aec_curve_by_low_smi_matched_peak_window.png")
 
     # 통합 3x3 패널 (2그룹 비교만)
     fig, axes = plt.subplots(3, 3, figsize=(18, 15))

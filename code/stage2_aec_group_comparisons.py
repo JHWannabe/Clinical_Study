@@ -2,11 +2,11 @@ from __future__ import annotations
 
 # Stage-1 TP/FP/TN 그룹 간 raw AEC-128 곡선(잔차화 없는 patient-normalized curve,
 # stage2_model.py의 AecBranch 입력과 동일 표현) 비교를 한 곳에 모은다:
-#   16: TP vs FP (raw, unmatched) -- Stage-1 screen-positive 안에서 실제 low-SMI(TP)와
-#       오탐(FP)의 raw AEC 곡선이 다른지
-#   17: FP vs TN (raw) -- "FP가 AEC상 TN을 닮는가" 가설 검정
-#   18: TP vs TN (raw) -- Stage-1이 "맞춘" 두 그룹 비교, AEC-128이 애초에 Low-SMI
+#   16: TP vs TN (raw) -- Stage-1이 "맞춘" 두 그룹 비교, AEC-128이 애초에 Low-SMI
 #       신호를 담고 있는지 보는 가장 기본적인 sanity check
+#   17: FP vs TN (raw) -- "FP가 AEC상 TN을 닮는가" 가설 검정
+#   18: TP vs FP (raw, unmatched) -- Stage-1 screen-positive 안에서 실제 low-SMI(TP)와
+#       오탐(FP)의 raw AEC 곡선이 다른지
 #   19: TP vs FP (propensity-matched) -- clinic 공변량(성별/나이/신장/체중)을
 #       Hungarian 최적할당으로 매칭해 confound를 설계로 통제한 뒤 재검정
 #
@@ -18,6 +18,10 @@ from __future__ import annotations
 # 있던 개별 summary CSV(16/16_tp_vs_fp(중복)/17/18/19)도
 # 16_19_stage2_group_comparison_summary.csv 하나로 합친다. (19의 covariate
 # balance는 스키마가 달라 별도 파일로 유지.)
+#
+# 16/17/18/19 각각 원곡선(p)뿐 아니라 1차/2차 미분곡선(dp/d2p, slice축 np.gradient --
+# code/0723/aec_two_step_ensemble.py의 Step-1 모델 입력 채널과 동일 정의)까지 세 변형을
+# 모두 비교해, 원곡선에서 안 보이는 형태 차이가 미분에서 드러나는지 본다.
 #
 # Run: python code/stage2_aec_group_comparisons.py
 
@@ -44,17 +48,49 @@ CLIN_COLS = stage2.CLIN_COLS  # ["sex_m", "age_std", "height_std", "weight_std"]
 CALIPER_MULT = 0.2
 SEED = 42
 
+# p/dp/d2p: raw patient-normalized AEC-128 curve and its 1st/2nd derivative along the
+# slice axis (np.gradient, central differences) -- same definition as
+# code/0723/aec_two_step_ensemble.py:compute_pdpd2p, so the Step-1 model's three input
+# channels are exactly the three curve variants compared here.
+CURVE_TYPE_META = {
+    "p": {"suffix": "", "label_suffix": "", "ylabel": "Patient-normalized AEC", "ref_line": 1.0},
+    "dp": {"suffix": "_dp", "label_suffix": " (dp)", "ylabel": "d(AEC)/d(slice)", "ref_line": 0.0},
+    "d2p": {"suffix": "_d2p", "label_suffix": " (d2p)", "ylabel": "d²(AEC)/d(slice)²", "ref_line": 0.0},
+}
+
+
+def curve_variant(df: pd.DataFrame, curve_type: str) -> pd.DataFrame:
+    """df has AEC_COLS holding patient-normalized AEC (p) plus other columns
+    (PatientID, group, ...). Returns a copy with AEC_COLS replaced by the requested
+    derivative; "p" is returned unchanged."""
+    if curve_type == "p":
+        return df
+    out = df.copy()
+    p = df[curve_mod.AEC_COLS].to_numpy(dtype=float)
+    dp = np.gradient(p, axis=1)
+    mat = dp if curve_type == "dp" else np.gradient(dp, axis=1)
+    out[curve_mod.AEC_COLS] = mat
+    return out
+
 
 def _run_curve_comparison(out_dir: Path, df: pd.DataFrame, order: list[str], labels: list[str],
-                           colors: list[str], title: str, fig_name: str, comparison_label: str) -> dict:
+                           colors: list[str], title: str, fig_name: str, comparison_label: str,
+                           curve_type: str = "p") -> dict:
+    meta = CURVE_TYPE_META[curve_type]
+    df = curve_variant(df, curve_type)
+    stem, ext = fig_name.rsplit(".", 1)
+    fig_name = f"{stem}{meta['suffix']}.{ext}"
+
     fig, ax = plt.subplots(figsize=(8, 5.5))
-    curve_mod.plot_curve_comparison(ax, df, "group", order, labels, colors, title)
+    curve_mod.plot_curve_comparison(ax, df, "group", order, labels, colors, title + meta["label_suffix"],
+                                     ylabel=meta["ylabel"], ref_line=meta["ref_line"])
     r = curve_mod.curve_diff_test(df, "group", order, labels)
     ax.text(0.02, 0.02, curve_mod.curve_diff_note(r),
             transform=ax.transAxes, fontsize=8, color=curve_mod.INK_MUTED, va="bottom")
     fig.tight_layout()
     curve_mod.savefig(fig, str(out_dir), fig_name)
-    return {"figure": fig_name, "comparison": comparison_label, **r}
+    return {"figure": fig_name, "comparison": comparison_label + meta["label_suffix"],
+            "curve_type": curve_type, **r}
 
 
 # --------------------------------------------------------- propensity matching --
@@ -110,44 +146,50 @@ def balance_table(clin_df: pd.DataFrame, group: pd.Series, matched_idx: np.ndarr
 
 # --------------------------------------------------------------------- cohort --
 def run_cohort(cohort: str, stage1_rows_all: pd.DataFrame, stage1_rows_pos: pd.DataFrame,
-               stage2_input_clin: pd.DataFrame, stage2_input_aec: pd.DataFrame, data_xlsx: Path) -> None:
+               stage2_input_clin: pd.DataFrame, stage2_input_aec: pd.DataFrame,
+               data_xlsx: Path) -> None:
     out_dir = OUT_ROOT / cohort
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_rows = []
 
-    # --- 16: TP vs FP (raw, unmatched) ---
-    df_tp_fp = stage2_input_aec.merge(stage1_rows_pos[["PatientID", "group"]], on="PatientID", how="inner")
-    assert len(df_tp_fp) == len(stage2_input_aec), f"{cohort}: TP/FP merge dropped rows"
-    summary_rows.append(_run_curve_comparison(
-        out_dir, df_tp_fp, ["TP", "FP"], ["TP (true low-SMI)", "FP (false positive)"],
-        [curve_mod.COL_A, curve_mod.COL_B],
-        f"Stage-1 screen-positive ({cohort}): TP vs FP AEC 곡선 비교",
-        "16_aec_curve_tp_vs_fp.png", "Stage-1 TP vs FP",
-    ))
+    curve_types = ["p", "dp", "d2p"]
+
+    # --- 16: TP vs TN (raw) ---
+    tp_tn_rows = stage1_rows_all[stage1_rows_all["group"].isin(["TP", "TN"])].reset_index(drop=True)
+    aec_tp_tn = stage2.load_aec_for_patients(data_xlsx, tp_tn_rows["PatientID"])
+    df_tp_tn = aec_tp_tn.merge(tp_tn_rows[["PatientID", "group"]], on="PatientID", how="inner")
+    assert len(df_tp_tn) == len(tp_tn_rows), f"{cohort}: TP/TN merge dropped rows"
+    for ct in curve_types:
+        summary_rows.append(_run_curve_comparison(
+            out_dir, df_tp_tn, ["TP", "TN"], ["TP (true low-SMI)", "TN (true negative)"],
+            [curve_mod.COL_A, curve_mod.COL_C],
+            f"Stage-1 ({cohort}): TP vs TN AEC 곡선 비교 (Stage-1이 맞춘 두 그룹)",
+            "16_aec_curve_tp_vs_tn.png", "Stage-1 TP vs TN", curve_type=ct,
+        ))
 
     # --- 17: FP vs TN (raw) ---
     fp_tn_rows = stage1_rows_all[stage1_rows_all["group"].isin(["FP", "TN"])].reset_index(drop=True)
     aec_fp_tn = stage2.load_aec_for_patients(data_xlsx, fp_tn_rows["PatientID"])
     df_fp_tn = aec_fp_tn.merge(fp_tn_rows[["PatientID", "group"]], on="PatientID", how="inner")
     assert len(df_fp_tn) == len(fp_tn_rows), f"{cohort}: FP/TN merge dropped rows"
-    summary_rows.append(_run_curve_comparison(
-        out_dir, df_fp_tn, ["FP", "TN"], ["FP (false positive)", "TN (true negative)"],
-        [curve_mod.COL_B, curve_mod.COL_C],
-        f"Stage-1 ({cohort}): FP vs TN AEC 곡선 비교",
-        "17_aec_curve_fp_vs_tn.png", "Stage-1 FP vs TN",
-    ))
+    for ct in curve_types:
+        summary_rows.append(_run_curve_comparison(
+            out_dir, df_fp_tn, ["FP", "TN"], ["FP (false positive)", "TN (true negative)"],
+            [curve_mod.COL_B, curve_mod.COL_C],
+            f"Stage-1 ({cohort}): FP vs TN AEC 곡선 비교",
+            "17_aec_curve_fp_vs_tn.png", "Stage-1 FP vs TN", curve_type=ct,
+        ))
 
-    # --- 18: TP vs TN (raw) ---
-    tp_tn_rows = stage1_rows_all[stage1_rows_all["group"].isin(["TP", "TN"])].reset_index(drop=True)
-    aec_tp_tn = stage2.load_aec_for_patients(data_xlsx, tp_tn_rows["PatientID"])
-    df_tp_tn = aec_tp_tn.merge(tp_tn_rows[["PatientID", "group"]], on="PatientID", how="inner")
-    assert len(df_tp_tn) == len(tp_tn_rows), f"{cohort}: TP/TN merge dropped rows"
-    summary_rows.append(_run_curve_comparison(
-        out_dir, df_tp_tn, ["TP", "TN"], ["TP (true low-SMI)", "TN (true negative)"],
-        [curve_mod.COL_A, curve_mod.COL_C],
-        f"Stage-1 ({cohort}): TP vs TN AEC 곡선 비교 (Stage-1이 맞춘 두 그룹)",
-        "18_aec_curve_tp_vs_tn.png", "Stage-1 TP vs TN",
-    ))
+    # --- 18: TP vs FP (raw, unmatched) ---
+    df_tp_fp = stage2_input_aec.merge(stage1_rows_pos[["PatientID", "group"]], on="PatientID", how="inner")
+    assert len(df_tp_fp) == len(stage2_input_aec), f"{cohort}: TP/FP merge dropped rows"
+    for ct in curve_types:
+        summary_rows.append(_run_curve_comparison(
+            out_dir, df_tp_fp, ["TP", "FP"], ["TP (true low-SMI)", "FP (false positive)"],
+            [curve_mod.COL_A, curve_mod.COL_B],
+            f"Stage-1 screen-positive ({cohort}): TP vs FP AEC 곡선 비교",
+            "18_aec_curve_tp_vs_fp.png", "Stage-1 TP vs FP", curve_type=ct,
+        ))
 
     # --- 19: TP vs FP (propensity-matched) ---
     group = stage1_rows_pos["group"].reset_index(drop=True)
@@ -166,14 +208,15 @@ def run_cohort(cohort: str, stage1_rows_all: pd.DataFrame, stage1_rows_pos: pd.D
 
     df_matched = aec_df.iloc[matched_idx].copy()
     df_matched["group"] = group.iloc[matched_idx].to_numpy()
-    r19 = _run_curve_comparison(
-        out_dir, df_matched, ["TP", "FP"], ["TP (true low-SMI)", "FP (false positive)"],
-        [curve_mod.COL_A, curve_mod.COL_B],
-        f"Stage-1 screen-positive ({cohort}): TP vs FP AEC 곡선 비교 (propensity-matched)",
-        "19_aec_curve_tp_vs_fp_matched.png", "Stage-1 TP vs FP (propensity-matched)",
-    )
-    r19["n_matched_pairs"] = len(matched_idx) // 2
-    summary_rows.append(r19)
+    for ct in curve_types:
+        r19 = _run_curve_comparison(
+            out_dir, df_matched, ["TP", "FP"], ["TP (true low-SMI)", "FP (false positive)"],
+            [curve_mod.COL_A, curve_mod.COL_B],
+            f"Stage-1 screen-positive ({cohort}): TP vs FP AEC 곡선 비교 (propensity-matched)",
+            "19_aec_curve_tp_vs_fp_matched.png", "Stage-1 TP vs FP (propensity-matched)", curve_type=ct,
+        )
+        r19["n_matched_pairs"] = len(matched_idx) // 2
+        summary_rows.append(r19)
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df["significant_p<0.05"] = summary_df["p_value"] < 0.05

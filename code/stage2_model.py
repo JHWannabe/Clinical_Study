@@ -814,6 +814,13 @@ def main() -> None:
     auc_stage1_ext = baseline.auc_significance_stats(y_all_ext, stage1_score_ext)
     auc_full_ext = baseline.auc_significance_stats(y_all_ext, full_score_ext)
 
+    # Whole-cohort (not screen-positive-only) full-pipeline ROC, alongside the
+    # Stage-2-only roc_curve_internal/external.png plotted above.
+    baseline.plot_roc_curve(y_all_int, full_score_int, auc_full_int, OUTPUT_DIR / "roc_curve_internal_full_pipeline.png",
+                             title="Full Pipeline: ROC (internal, whole cohort)")
+    baseline.plot_roc_curve(y_all_ext, full_score_ext, auc_full_ext, OUTPUT_DIR / "roc_curve_external_full_pipeline.png",
+                             title="Full Pipeline: ROC (external, whole cohort)")
+
     # DeLong test: Stage-1 and full-pipeline scores are evaluated on the SAME
     # patients, so their AUCs are correlated -- an independent vs-0.5 comparison
     # (auc_significance_stats) can't tell whether the two differ from each other.
