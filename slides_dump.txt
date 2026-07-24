@@ -1,0 +1,176 @@
+===== SLIDE 1 =====
+---shape--- TEXT_BOX (17) TextBox 1
+  P: Comparison of AECs between groups after low-smi classification with clinic data
+---shape--- TEXT_BOX (17) TextBox 2
+  P: 2026. 07. 24
+---shape--- TEXT_BOX (17) TextBox 3
+  P: JangHoon Chun
+---shape--- TEXT_BOX (17) TextBox 4
+  P: Department of, Medical Device Engineering & Management
+  P: Gangnam Severance Hospital,
+  P: Yonsei University College of Medicine
+=== NOTES ===
+이 발표는 CT 촬영 시 자동으로 조절되는 X선량 정보(AEC)를 활용해서, 저근감소증(근육량이 적은 상태) 위험군을 더 정확하게 가려낼 수 있는지, 그리고 그 결과가 체형 차이 같은 다른 요인 때문에 생긴 착시는 아닌지 검증한 내용입니다. 발표자: 전장훈(JangHoon Chun), 강남세브란스병원 의료기기산업학과.
+===== SLIDE 2 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) 내용 개체 틀 3
+  P: Clinic 4개 변수(Sex, Age, Height, Weight)로 성별별 low-SMI 분류 (M: smi < 45.4, F: smi < 34.4)
+  P: AUC internal 0.828 / external 0.835
+  P: Sensitivity 90%인 컷오프로 Confusion Matrix 확인
+---shape--- PICTURE (13) 그림 5
+=== NOTES ===
+이 슬라이드는 1단계(Stage-1) 모델을 소개합니다. 저근감소증(low-SMI, 근육량이 적은 상태)은 나이가 들수록 낙상·수술 후 합병증·사망 위험을 높이는 것으로 알려져 있습니다(Prado 2008, Martin 2013). CT를 찍지 않고도 병원에 이미 있는 간단한 정보 4가지(성별/나이/키/체중)만으로 저근감소증일 확률을 예측하는 간단한 통계 모델(로지스틱 회귀)을 만들었습니다.
+
+이 모델이 환자를 얼마나 잘 구별하는지 나타내는 점수(AUC -- 0.5면 동전 던지기 수준, 1.0이면 완벽 구별)가 내부 병원 데이터에서 0.828, 외부(신촌) 병원 데이터에서 0.835로 나왔습니다. 둘 다 '꽤 쓸만한 수준(0.8 이상)'이고, 모델이 실제 데이터에 잘 들어맞는지 보는 별도 검정(Hosmer-Lemeshow)도 양호~우수 경계로 통과했습니다.
+
+이 모델을 쓰려면 몇 점 이상을 Positive(위험군)로 볼지 기준선(cutoff)을 정해야 합니다. 저희는 Sensitivity(민감도, 실제 위험군 환자 중 모델이 Positive로 잡아내는 비율) 90%를 기준으로 골랐습니다. Sensitivity 100%는 표본이 너무 작아 통계적으로 믿을 수 없고, Sensitivity를 90%에서 95%로 더 올리면 반대로 Specificity(특이도, 실제 정상인 사람을 Negative로 잘 구별하는 비율)가 급격히 나빠지기 시작하는 지점이라 90%에서 멈췄습니다. FN(놓친 위험군 환자)의 비용이 FP(잘못 Positive로 분류된 정상인)보다 크다고 가정했습니다.
+===== SLIDE 3 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- TABLE (19) 표 4
+  ROW: ['구간', 'Internal FN', 'Internal FP', 'External FN', 'External FP']
+  ROW: ['Sens 85%', '19', '350', '17', '337']
+  ROW: ['Sens 90%', '12', '447', '10', '398']
+  ROW: ['Sens 95%', '6', '582', '5', '529']
+---shape--- TABLE (19) 표 6
+  ROW: ['구간 이동', 'ΔFN (놓치는 환자 감소)', 'ΔFP (불필요 정밀검사 증가)', 'FN 1명 줄이는데 드는 FP 비용']
+  ROW: ['85%→90% (internal)', '-7', '+97', '13.9건']
+  ROW: ['85%→90% (external)', '-7', '+61', '8.7건']
+  ROW: ['90%→95% (internal)', '-6', '+135', '22.5건']
+  ROW: ['90%→95% (external)', '-5', '+131', '26.2건']
+=== NOTES ===
+이 표는 기준선(cutoff)을 85%→90%→95%로 올릴 때 무엇을 얻고 무엇을 잃는지 보여줍니다. 기준선을 높일수록 '놓치는 위험군 환자(FN)'는 줄어들지만, 그 대신 '정상인데 위험군으로 잘못 분류되는 사람(FP)'이 훨씬 많이 늘어납니다.
+
+예를 들어 내부 데이터에서 85%→90%로 올리면 놓치는 환자는 7명 줄지만 잘못 분류되는 사람은 97명 늘어나서, 환자 1명을 덜 놓치려고 13.9명을 더 검사해야 하는 셈입니다. 90%→95%로 한 번 더 올리면 이 '대가'가 22.5명으로 더 커집니다. 즉 기준선을 높일수록 효율이 나빠지는 속도가 더 빨라집니다. 그래서 손해가 급격히 커지기 직전인 90%에서 멈추는 것이 합리적입니다.
+===== SLIDE 4 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PICTURE (13) Picture 11
+---shape--- AUTO_SHAPE (1) 직사각형 9
+  P: 
+---shape--- AUTO_SHAPE (1) 직사각형 10
+  P: 
+=== NOTES ===
+Sensitivity(민감도) 90% 기준선으로 환자를 Positive(위험군)와 Negative(정상군)로 나눈 결과표, confusion matrix입니다. 이상태에서의 NPV가 내부 97.7%, 외부 97.5%로 이미 충분히 높아 이 그룹은 더 손댈 필요가 없습니다.
+
+문제는 Positive로 분류된 쪽입니다. 이 중 실제로 위험군(TP)인 사람의 비율, PPV(Positive Predictive Value)가 내부 20.7%, 외부 24.8%밖에 안 됩니다. 그래서 이후 분석(Stage-2)은 Positive로 분류된 사람들만 대상으로, 그 안에서 TP와 FP를 더 정확히 가려내는 것을 목표로 합니다.
+===== SLIDE 5 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 그룹 간 p / dp / d2p 곡선 비교
+---shape--- TABLE (19) 표 3
+  ROW: ['비교 (강남)', 'p (raw)', 'dp (1차미분)', 'd2p (2차미분)']
+  ROW: ['FP vs TN', 'RMSD=0.0287, p=0.0005', 'RMSD=0.0021, p=0.0005', 'RMSD=0.0004, p=0.0005']
+  ROW: ['TP vs TN', 'RMSD=0.0325, p=0.002', 'RMSD=0.0026, p=0.0005', 'RMSD=0.0006, p=0.0005']
+  ROW: ['TP vs FP', 'RMSD=0.0155, p=0.227', 'RMSD=0.0012, p=0.155', 'RMSD=0.0005, p=0.199']
+  ROW: ['TP vs FP (psm)', 'RMSD=0.0057, p=0.983', 'RMSD=0.0009, p=0.982', 'RMSD=0.0006, p=0.478']
+---shape--- TABLE (19) 표 5
+  ROW: ['비교 (신촌)', 'p (raw)', 'dp (1차미분)', 'd2p (2차미분)']
+  ROW: ['FP vs TN', 'RMSD=0.0226, p=0.0045', 'RMSD=0.0017, p=0.0005', 'RMSD=0.0004, p=0.093']
+  ROW: ['TP vs TN', 'RMSD=0.0289, p=0.0135', 'RMSD=0.0023, p=0.0005', 'RMSD=0.0006, p=0.084']
+  ROW: ['TP vs FP', 'RMSD=0.0274, p=0.0175', 'RMSD=0.0016, p=0.005', 'RMSD=0.0005, p=0.425']
+  ROW: ['TP vs FP (psm)', 'RMSD=0.0422, p=0.0165', 'RMSD=0.0023, p=0.0095', 'RMSD=0.0006, p=0.417']
+=== NOTES ===
+이 표는 TP·FP·TN 그룹 간에 AEC 곡선의 모양이 통계적으로 다른지 검정한 결과입니다. p=원곡선 그대로 비교, dp=곡선의 기울기(변화율) 비교, d2p=기울기의 변화(곡률) 비교. RMSD는 두 그룹 평균 곡선이 얼마나 차이 나는지를 나타내는 숫자(클수록 다름)이고, p-value는 '이 정도 차이가 우연히 나올 확률'입니다(0.05보다 작으면 우연이 아니라고 보고 '유의'하다고 부릅니다).
+
+핵심 결과: 위험군(TP·FP)을 각각 정상군(TN)과 비교하면 뚜렷하게 다릅니다(p<0.01, 각 표 첫 두 줄). 그런데 정작 구별하고 싶은 'TP vs FP'(진짜 위험군 vs 가짜 위험군)는 강남에서는 원곡선/기울기/곡률 셋 다 유의하지 않고(p=0.227/0.155/0.199), 신촌에서는 원곡선과 기울기만 약하게 유의합니다(p=0.0175/0.005). '(psm)' 표시는 성별·나이·키·체중이 비슷한 환자끼리 미리 짝지어(propensity matching) 비교한 결과인데, 짝지은 뒤에도 신촌은 여전히 유의하게 남아 있습니다(슬라이드8에서 더 자세히 다룸).
+===== SLIDE 6 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: Stage-1 TP vs FP AEC-128 비교 (raw)
+---shape--- GROUP (6) 그룹 3
+=== NOTES ===
+TP(True Positive)와 FP(False Positive)의 AEC 곡선을 원본 그대로(매칭 없이) 겹쳐 그린 그림입니다. 슬라이드5에서 본 것처럼 두 곡선이 육안으로도 비슷해 보이고 통계적으로도 뚜렷한 차이가 없습니다(강남 p=0.227, 신촌 p=0.0175로 신촌만 약하게 유의). 즉 AEC 곡선 하나만 봐서는 TP인지 FP인지 구별하기 어렵다는 것을 보여주는 그림입니다.
+===== SLIDE 7 =====
+---shape--- GROUP (6) 그룹 3
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: Stage-1 TP vs FP AEC-128 비교 (Propensity-matched)
+=== NOTES ===
+위 슬라이드와 같은 TP vs FP 비교인데, 이번에는 '성별·나이·키·체중이 비슷한 환자끼리' 미리 짝을 지은 뒤(propensity matching -- 쌍둥이처럼 비슷한 사람끼리 골라 비교하는 방법) 곡선을 비교했습니다. 혹시 '체형 차이' 때문에 곡선이 달라 보이는 착시가 있었던 건 아닌지 확인하기 위해서입니다. 짝을 지은 뒤에도 강남은 여전히 차이가 없고(p=0.983), 신촌은 여전히 약한 차이가 남아 있습니다(p=0.0165) -- 체형 차이 때문에 생긴 착시는 아니라는 뜻입니다.
+===== SLIDE 8 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 일반적인 곡선 Feature(14개) 추출하여 비교
+  P: 분포: std, skew, kurtosis
+  P: 피크·트로프: peak_pos, peak_val, trough_pos, trough_val, range
+  P: 형태·기울기: centroid, early_late_diff, slope_early, slope_late
+  P: 편차: total_abs_dev, frac_above_center
+  P: FDR-q: 다중검정(84개) 보정 후 오탐 기대비율 — 유의 0/14
+---shape--- TABLE (19) Table 3
+  ROW: ['코호트', 'raw', 'propensity-matched', 'clinic-residualized']
+  ROW: ['강남 (internal)', '0/14 (p<.05: 2)', '0/14 (p<.05: 0)', '0/14 (p<.05: 2)']
+  ROW: ['신촌 (external)', '0/14 (p<.05: 2)', '0/14 (p<.05: 2)', '0/14 (p<.05: 3)']
+=== NOTES ===
+AEC 곡선 128개 지점을 통째로 비교하는 대신, '곡선의 생김새'를 요약하는 14가지 숫자(예: 곡선이 얼마나 들쭉날쭉한지, 어디서 가장 높고 낮은지, 앞부분과 뒷부분 기울기가 얼마나 다른지 등)를 각각 따로 뽑아서 TP와 FP 사이에 차이가 있는지 하나하나 검정했습니다. 사람 눈에는 안 보이는 미세한 형태 차이를 잡아낼 수도 있다는 생각에서입니다.
+
+주의할 점: 검정을 한 번만 하면 우연히 유의하게 나올 확률이 5%지만, 여기서는 14개(+비교용 clinic 변수 4개=18개)를 한꺼번에 검정하기 때문에, 개별 p<0.05만 보면 우연히 몇 개는 '유의'하게 나올 수밖에 없습니다(로또를 18번 사면 그럴듯한 게 하나쯤은 나오는 것과 비슷한 이치). 이 '우연히 유의해 보이는 것'을 걸러내는 보정된 기준이 q-value입니다. q<0.05는 '이 안에서 유의하다고 뽑은 것들 중 실제로 우연이 섞여 있을 비율이 5% 이하로 통제된 상태'라는 뜻으로, 개별 p-value보다 더 엄격하고 믿을 만한 기준입니다.
+
+결과: raw(원표본) / matched(비슷한 환자끼리 매칭) / residualized(체형 영향을 통계적으로 미리 빼고 비교) 세 가지 방법, 강남·신촌 두 코호트, 84번의 검정(14개 feature x 3방법 x 2코호트) 전부 q-value 기준으로는 유의한 것이 하나도 없었습니다(0/84). 보정 전 p<0.05만 보면 조합마다 0~3개씩 나오지만, 매번 다른 지표가 걸리고 보정하면 사라지므로 '진짜 신호'가 아니라 '우연'으로 판단합니다.
+===== SLIDE 9 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 강남(internal): raw/matched/residualized 전부 14개 feature 유의 없음 (q<0.05 0/14)
+  P: 가로축 -log10(p) — 점선(p=0.05) 오른쪽으로 넘어가야 유의, 왼쪽은 비유의
+---shape--- PICTURE (13) Picture 3
+=== NOTES ===
+강남 데이터에서 14개 곡선-형태 지표 각각의 p-value를 막대그래프로 그린 그림입니다(왼쪽부터 원표본/매칭/체형보정 3가지 방법). 막대가 길수록(오른쪽으로 갈수록) '우연이 아닐 가능성'이 높다는 뜻이고, 점선(p=0.05 위치)을 넘어야 최소한의 기준을 만족합니다. 강남은 3가지 방법 모두에서 진짜로 믿을 만한 차이(q<0.05)가 하나도 없었습니다.
+===== SLIDE 10 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 신촌(external): raw/matched/residualized 전부 14개 feature 유의 없음 (q<0.05 0/14)
+  P: 가로축 -log10(p) — 점선(p=0.05) 오른쪽으로 넘어가야 유의, 왼쪽은 비유의
+---shape--- PICTURE (13) Picture 3
+=== NOTES ===
+신촌 데이터의 같은 그림입니다. 강남과 마찬가지로 14개 지표 중 진짜로 믿을 만한 차이(q<0.05)는 없습니다. 다만 슬라이드5에서 봤던 '신촌은 원곡선 전체로 보면 약하게 차이가 남아있다'는 결과와는 대비됩니다 -- 곡선을 14개 요약 지표로 압축해서 보면 그 미세한 차이가 사라진다는 뜻으로, 특정한 하나의 형태 특징으로 설명되는 게 아니라 곡선 전체에 아주 옅게 퍼져 있는 잡음에 가깝다는 뜻일 수 있습니다.
+===== SLIDE 11 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: AEC-128 곡선 PCA: PC1-PC5 (raw 누적분산 96.8%, residualized 94.7%)
+  P: internal(n=1090) 적합, external frozen — 잔차화 회귀와 동일 관례
+  P: raw / propensity-matched / clinic-residualized 3방법 × 강남·신촌 × PC1-5
+  P: 강남: 15개 PC-검정 전부 비유의 (q<0.05 0/15)
+  P: 신촌: raw/matched 비유의, residualized PC1만 경계선 유의 (q=0.045)
+---shape--- TABLE (19) Table 3
+  ROW: ['코호트', 'raw', 'propensity-matched', 'clinic-residualized']
+  ROW: ['강남 (internal)', '0/5', '0/5', '0/5']
+  ROW: ['신촌 (external)', '0/5', '0/5', '1/5 (PC1, q=.045)']
+=== NOTES ===
+사람이 직접 정의한 14개 지표 말고, 이번에는 컴퓨터가 데이터를 보고 스스로 '가장 차이가 많이 나는 방향'을 찾아내는 방법(PCA, 주성분분석)으로도 같은 질문(TP와 FP 곡선이 다른가)을 확인했습니다. 128개 구간짜리 곡선을 5개의 숫자(주성분 1~5)로 압축했는데, 이 5개만으로도 원래 곡선 정보의 대부분(원곡선 기준 96.8%, 체형보정 곡선 기준 94.7%)을 담고 있습니다.
+
+결과: 강남은 이번에도 15번의 검정(주성분 5개 x 3가지 방법) 전부 믿을 만한 차이가 없었습니다. 신촌은 원표본과 매칭 방법에서는 역시 차이가 없었지만, '체형 영향을 미리 뺀' 방법에서만 주성분 1번 하나가 아슬아슬하게 기준을 넘었습니다(q=0.045, 기준 0.05보다 살짝 낮음). 다만 이 차이의 크기 자체는 작고(효과크기 작음), 신촌 표본이 커서(TP 131명, FP 398명) 작은 차이도 통계적으로 잡힌 것으로 보입니다. 즉 강남은 어떤 방법으로 봐도 깨끗하게 차이가 없고, 신촌은 아주 미세하고 일관되지 않은 흔적만 남아있는 정도입니다.
+===== SLIDE 12 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 강남(internal): PC1-5 raw/matched/residualized 전부 유의 없음 (q<0.05 0/15)
+  P: 가로축 -log10(p) — 점선(p=0.05) 오른쪽으로 넘어가야 유의, 왼쪽은 비유의
+---shape--- PICTURE (13) Picture 3
+=== NOTES ===
+강남의 주성분별 p-value 그림입니다. 5개 주성분 x 3가지 방법 모두에서 믿을 만한 차이가 없었습니다.
+===== SLIDE 13 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Detailed progress
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: 신촌(external): raw/matched 유의 없음, residualized PC1만 경계선 유의 (q=0.045)
+  P: 가로축 -log10(p) — 점선(p=0.05) 오른쪽으로 넘어가야 유의, 왼쪽은 비유의
+---shape--- PICTURE (13) Picture 3
+=== NOTES ===
+신촌의 같은 그림입니다. 원표본과 매칭 방법에서는 주성분 1번이 점선(p=0.05)을 살짝 넘지만 보정 후에는 유의하지 않고, '체형 영향을 미리 뺀' 방법에서만 주성분 1번이 보정 후에도 살짝 유의합니다(그림에서 'q<0.05' 표시가 붙은 유일한 막대).
+===== SLIDE 14 =====
+---shape--- PLACEHOLDER (14) Title 1
+  P: Next Plans
+---shape--- PLACEHOLDER (14) Content Placeholder 2
+  P: AEC-128 raw curve만으로는 TP/FP 구분 불가 (코호트 간 결과 불일치) → 새로운 접근 필요
+  P: Clinic Data와 AEC Feature의 Multimodal Architecture 설계
+  P: AUC 개선 방안 연구
+=== NOTES ===
+지금까지의 결과를 정리하면, AEC 곡선 하나만으로는(원곡선이든, 요약 지표든, 주성분이든) TP와 FP를 뚜렷하게 구별하기 어렵습니다. 다만 강남과 신촌 결과가 완전히 같지는 않아서(신촌에 미세한 흔적이 남음) 좀 더 정교한 접근이 필요합니다. 다음 단계로는 임상 정보(성별/나이/키/체중)와 AEC 곡선 정보를 딥러닝 모델(멀티모달 구조)로 함께 학습시켜서 사람이 놓칠 수 있는 복합적인 패턴을 잡아낼 수 있는지 시도하고, Stage-1 모델 자체의 성능(AUC)을 높이는 방법도 함께 연구할 계획입니다.

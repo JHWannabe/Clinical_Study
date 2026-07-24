@@ -1,0 +1,28 @@
+---TEXT---
+Detailed progress
+---TEXT---
+Stage-2: 자체 학습(5-fold OOF) — Threshold-shift-only 대비 AEC 효과는 코호트마다 다름
+자체 학습(self-trained): Threshold-shift-only vs. AEC-CNN — 동일 sensitivity에서 specificity 비교
+
+
+
+
+
+External transfer: 자체 학습된 모델을 다른 코호트에 그대로 적용
+
+---TABLE---
+Cohort | Stage-2 input | spec p-value | Net NRI | n_deesc | Full-pipeline AUC (Δ vs Stage-1, DeLong p)
+Sinchon | Threshold-shift only | 3.4e-21 | +63 | 75 | -
+Sinchon | AEC-CNN (self-trained) | 4.0e-28 | +86 | 98 | 0.829 (Δ-0.003, p=0.256)
+Gangnam | Threshold-shift only | 4.1e-25 | +77 | 87 | -
+Gangnam | AEC-CNN (self-trained) | 5.3e-23 | +70 | 80 | 0.827 (Δ-0.002, p=0.632)
+---TEXT---
+→ Sinchon: AEC-CNN(+86)이 threshold-shift(+63)를 유의하게 초과 / Gangnam: threshold-shift(+77)가 오히려 AEC-CNN(+70)보다 높음 — AEC 효과가 코호트 간 반대. AUC는 둘 다 baseline 대비 유의한 상승 없음(오히려 소폭 하락, 비유의)
+---TABLE---
+Trained on | Tested on | spec p-value | Net NRI | n_deesc | NI test | Full-pipeline AUC (Δ vs Stage-1, DeLong p)
+Sinchon | Gangnam (external) | 3.1e-33 | +95 | 123 | FAIL | 0.827 (Δ-0.005, p=0.010)
+Gangnam | Sinchon (external) | 2.7e-20 | +61 | 71 | PASS | 0.829 (Δ-0.006, p=0.053)
+---TEXT---
+→ Sinchon→Gangnam은 NRI가 가장 크지만(+95) sensitivity가 과도하게 떨어져 NI test FAIL — AUC도 baseline보다 유의하게 하락(p=0.010), 숫자만 좋아 보이는 함정. Gangnam→Sinchon(+61)은 NI PASS, AUC 하락은 경계선 수준(p=0.053)
+---TEXT---
+→ Gangnam AEC-CNN 자체 OOF AUC=0.52(노이즈 수준) — Gangnam raw curve TP-vs-FP 비유의(p=0.227)와 일치, AEC가 Gangnam에서는 애초에 분리 신호를 담고 있지 않음

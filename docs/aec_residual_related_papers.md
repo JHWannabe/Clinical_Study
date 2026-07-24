@@ -11,10 +11,23 @@
 - Snoek, L., Miletić, S., & Scholte, H. S. (2019). How to Control for Confounds in Decoding
   Analyses of Neuroimaging Data. *NeuroImage*, 184, 741–760.
   https://doi.org/10.1016/j.neuroimage.2018.10.024
+  — **데이터 유형**: fMRI voxel decoding(시뮬레이션 + 실제 neuroimaging), 자연 이미지나 1D
+  신호가 아님. **주의**: 이 논문의 핵심 결론은 confound regression이 안전한 해법이라는 게
+  아니라, confound regression이 **음의 편향**(실제보다 성능을 과소평가, 일부 시나리오에서
+  chance 이하)을, post-hoc counterbalancing은 반대로 양의 편향을 유발할 수 있다는 경고다.
+  본 프로젝트의 slice-wise OLS residualization도 이 편향 위험에서 자유롭지 않을 수 있음 —
+  인용 시 "confound regression 정당화" 근거가 아니라 "위험 인지" 근거로 표기할 것.
 - Chaibub Neto, E. (2021). Causality-Aware Counterfactual Confounding Adjustment as an
   Alternative to Linear Residualization in Anticausal Prediction Tasks Based on Linear
   Learners. *arXiv:2011.04605* (ICML 2021).
   https://arxiv.org/abs/2011.04605
+  — **데이터 유형**: 순수 synthetic 데이터(regression MSE, classification accuracy)만 사용,
+  실제 1D 신호·이미지·곡선 예시 없음. Linear residualization의 대안(counterfactual
+  adjustment)을 이론적으로 비교하는 논문이라는 점만 인용 근거로 삼을 것.
+
+이 두 문헌은 confound-regression *일반론*(및 그 위험/대안)의 근거일 뿐, AEC-128 같은
+**1D 곡선(functional data) 자체**를 covariate로 조정한 논문은 아니다 — 그 직접적 대응은
+아래 3절(Li et al. 2017, Wittenberg et al. 2024)이다.
 
 ## 2. 잔차(gap)를 그 자체로 다운스트림 바이오마커로 쓰는 접근
 
@@ -28,13 +41,25 @@
 
 ## 3. Covariate-adjusted 잔차를 곡선(functional data) 단위로 다루는 연구
 
+**본 프로젝트의 slice-wise OLS residualization(`aec_i ~ CLIN_COLS`, 128 슬라이스 각각 회귀)에
+가장 직접적으로 대응하는 두 문헌.**
+
 - Li, P.-L., Chiou, J.-M., & Shyr, Y. (2017). Functional Data Classification Using
   Covariate-Adjusted Subspace Projection. *Computational Statistics & Data Analysis*, 115,
   21–34.
   https://doi.org/10.1016/j.csda.2017.05.007
-- Covariate-Adjusted Functional Data Analysis for Structural Health Monitoring (2024).
-  *arXiv:2408.02106* (Data-Centric Engineering, Cambridge Univ. Press).
+  — covariate가 response function(곡선)의 **평균 함수(mean function)** 에 함수회귀로 영향을
+  준다고 모델링하고, covariate-adjusted mean function을 곡선에서 뺀 잔차(Karhunen–Loève
+  기반 서브스페이스)로 분류. 본 프로젝트의 `aec_i ~ CLIN_COLS` 적합 및 `residual = aec_i -
+  predicted` 계산과 구조적으로 동일한 절차.
+- Wittenberg, P., Neumann, L., Mendler, A., & Gertheiss, J. (2024). Covariate-Adjusted
+  Functional Data Analysis for Structural Health Monitoring. *arXiv:2408.02106* (Data-Centric
+  Engineering, Cambridge Univ. Press).
   https://arxiv.org/abs/2408.02106
+  — 구조물 센서의 1D 시계열(곡선)에서 온도 등 환경 covariate로 인한 변동을 function-on-
+  function regression으로 제거하고, 잔차 곡선을 이상탐지 신호로 사용. "정상 covariate
+  변동을 제거한 잔차가 이상/신호를 담는다"는 논지가 본 프로젝트의 residualized-AEC-sum
+  아이디어(잔차 곡선 합산 스칼라를 재분류 신호로 사용)와 동일.
 
 ## 4. AEC가 아닌 다른 1D 신호에 쓰이는 대안적 전처리(스케일/베이스라인 보정)
 
