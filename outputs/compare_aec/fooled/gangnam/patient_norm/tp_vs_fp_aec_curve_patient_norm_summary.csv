@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
+gangnam,patient_norm,117,447,0.01569360521460422,124,0.04374976603069136,TP > FP,2000,0.22038980509745126

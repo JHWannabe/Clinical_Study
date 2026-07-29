@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
+sinchon,patient_norm,131,398,0.027438801825249957,3,-0.05378814518803687,TP < FP,2000,0.01699150424787606

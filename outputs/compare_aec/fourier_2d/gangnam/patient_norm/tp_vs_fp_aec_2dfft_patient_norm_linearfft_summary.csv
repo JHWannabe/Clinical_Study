@@ -1,0 +1,2 @@
+﻿cohort,normalization,fft_scale,n_tp,n_fp,image_rmsd,peak_freq_x_cycle,peak_freq_y_cycle,peak_deviation,direction,n_perm,p_value
+gangnam,patient_norm,linear,117,447,8.518265960422803e-05,-4.0,-4.0,-0.0005786177833982241,TP < FP,2000,0.5527236381809095

@@ -1,0 +1,2 @@
+﻿cohort,normalization,sex,fft_scale,n_tp,n_fp,image_rmsd,peak_freq_x_cycle,peak_freq_y_cycle,peak_deviation,direction,n_perm,p_value
+gangnam,raw,M,linear,72,217,0.00010694460015081275,0.0,5.0,0.0014474112298557343,TP > FP,2000,0.4147926036981509

@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
+gangnam,raw,117,447,10.066209894420966,1,-13.502151092755128,TP < FP,2000,0.25337331334332835

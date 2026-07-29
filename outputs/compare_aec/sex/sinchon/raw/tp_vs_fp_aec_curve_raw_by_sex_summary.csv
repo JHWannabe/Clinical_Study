@@ -1,0 +1,3 @@
+﻿cohort,normalization,sex,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
+sinchon,raw,M,95,231,10.497174931447242,3,-18.927880154932723,TP < FP,2000,0.2318840579710145
+sinchon,raw,F,36,167,15.478103977074307,1,-27.50049900199599,TP < FP,2000,0.248375812093953

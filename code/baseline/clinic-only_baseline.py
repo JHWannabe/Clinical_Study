@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-# Clinical-only low-SMI classifier on the internal cohort (g1090.xlsx) only.
-# Fits a Logistic Regression on {PatientAge, Height, Weight, sex} via 5-fold
-# cross-validation, picks the score threshold that hits >=90% sensitivity on the
-# out-of-fold predictions, and saves the resulting confusion matrix as a figure + csv.
-# Run: python code/new_hypothesis.py
+# 임상변수만으로 Low-SMI를 분류하는 baseline 로지스틱 회귀 파이프라인
 
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -24,12 +19,12 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0_clinic-only_baseline"
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
-TARGET_SENSITIVITIES = [0.85, 0.90, 0.95]
 TARGET_SENSITIVITY = 0.90
 N_FOLDS = 5
 SEED = 20260709
 
 
+# 엑셀에서 메타데이터를 읽고 성별 기준 SMI 컷오프로 low-SMI 라벨 y를 생성
 def load_cohort(xlsx_path: Path) -> tuple[pd.DataFrame, np.ndarray]:
     meta = pd.read_excel(xlsx_path, sheet_name="metadata", engine="openpyxl").reset_index(drop=True)
     sex = meta["PatientSex"].astype(str).str.upper().to_numpy()
@@ -38,6 +33,7 @@ def load_cohort(xlsx_path: Path) -> tuple[pd.DataFrame, np.ndarray]:
     return meta, y
 
 
+# sex/age/height/weight로 원본 임상변수 행렬 구성
 def raw_clinical_matrix(meta: pd.DataFrame) -> np.ndarray:
     sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(int)
     age = pd.to_numeric(meta["PatientAge"], errors="coerce").to_numpy(dtype=int)
@@ -46,9 +42,9 @@ def raw_clinical_matrix(meta: pd.DataFrame) -> np.ndarray:
     return np.column_stack([sex_m, age, height, weight, ])
 
 
+# 결측치 대체용 중앙값과 표준화 파라미터(mu, sd)를 학습
 def fit_clinical_standardizer(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # Column 0 is sex_m (binary indicator) -- left unscaled (mu=0, sd=1),
-    # only age/height/weight (columns 1:) are standardized.
+    # sex_m(0열)은 이진값이라 표준화하지 않고 age/height/weight만 표준화
     med = np.nanmedian(x, axis=0)
     x = np.where(np.isfinite(x), x, med)
     scaler = StandardScaler().fit(x[:, 1:])
@@ -57,17 +53,13 @@ def fit_clinical_standardizer(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np
     return med, mu, sd
 
 
+# 학습된 중앙값/mu/sd로 결측 대체 및 표준화 적용
 def apply_clinical_standardizer(x: np.ndarray, med: np.ndarray, mu: np.ndarray, sd: np.ndarray) -> np.ndarray:
     x = np.where(np.isfinite(x), x, med)
     return (x - mu) / sd
 
 
-def clinical_features(meta: pd.DataFrame) -> np.ndarray:
-    x = raw_clinical_matrix(meta)
-    med, mu, sd = fit_clinical_standardizer(x)
-    return apply_clinical_standardizer(x, med, mu, sd)
-
-
+# 5-fold 교차검증으로 out-of-fold 예측 점수 산출
 def oof_scores(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     oof = np.zeros(len(y), dtype=float)
     skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
@@ -78,12 +70,12 @@ def oof_scores(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return oof
 
 
+# 전체 코호트로 학습하는 표준 baseline 모델(다른 스크립트도 재사용해야 함)
 def fit_baseline_model(x: np.ndarray, y: np.ndarray, seed: int = SEED) -> LogisticRegression:
-    # Canonical clinical-only baseline (fit on the full cohort, no CV holdout) --
-    # every script needing a "baseline" model must reuse this, not refit its own.
     return LogisticRegression(C=1.0, solver="lbfgs", max_iter=5000, random_state=seed).fit(x, y)
 
 
+# 예측/실제 라벨로 TP/FP/FN/TN 개수 계산
 def confusion_counts(y: np.ndarray, pred: np.ndarray) -> tuple[int, int, int, int]:
     pred = pred.astype(bool)
     pos = y.astype(bool)
@@ -94,6 +86,7 @@ def confusion_counts(y: np.ndarray, pred: np.ndarray) -> tuple[int, int, int, in
     return tp, fp, fn, tn
 
 
+# 목표 민감도(target) 이상을 만족하면서 특이도가 최대인 threshold 탐색
 def threshold_for_sensitivity(y: np.ndarray, score: np.ndarray, target: float) -> float:
     best = None
     for th in np.unique(score):
@@ -107,6 +100,7 @@ def threshold_for_sensitivity(y: np.ndarray, score: np.ndarray, target: float) -
     return best[0]
 
 
+# 코호트별 sens/spec/ppv/npv 계산 및 출력
 def evaluate(cohort: str, y: np.ndarray, pred: np.ndarray, th: float) -> dict:
     tp, fp, fn, tn = confusion_counts(y, pred)
     n = len(y)
@@ -118,6 +112,7 @@ def evaluate(cohort: str, y: np.ndarray, pred: np.ndarray, th: float) -> dict:
     return {"cohort": cohort, "matrix": np.array([[tp, fn], [fp, tn]]), "th": th, "sens": sens, "spec": spec, "ppv": ppv, "npv": npv}
 
 
+# 혼동행렬을 히트맵으로 시각화
 def plot_confusion_matrix(ax: Axes, result: dict) -> None:
     matrix = result["matrix"]
     ax.imshow(matrix, cmap="Blues", vmin=0, vmax=max(matrix.max(), 1))
@@ -133,38 +128,8 @@ def plot_confusion_matrix(ax: Axes, result: dict) -> None:
     ax.set_title(f"{label}\n(threshold={result['th']:.3f})", fontsize=11, fontweight="bold")
 
 
-def plot_comparison_summary(results: list[dict], out_path: Path) -> None:
-    metrics = ["sens", "spec", "ppv", "npv"]
-    metric_labels = ["Sensitivity", "Specificity", "PPV", "NPV"]
-    cohorts = ["internal", "external"]
-    targets = sorted({r["target"] for r in results})
-
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
-    width = 0.2
-    x = np.arange(len(metrics))
-    for ax, cohort in zip(axes, cohorts):
-        for i, target in enumerate(targets):
-            result = next(r for r in results if r["cohort"] == cohort and r["target"] == target)
-            values = [result[m] for m in metrics]
-            ax.bar(x + (i - (len(targets) - 1) / 2) * width, values, width, label=f"S{target * 100:0.0f}")
-        ax.set_xticks(x)
-        ax.set_xticklabels(metric_labels)
-        ax.set_ylim(0, 1.05)
-        ax.set_title(cohort)
-        ax.grid(axis="y", alpha=0.3)
-    axes[0].set_ylabel("Value")
-    axes[1].legend(title="Sensitivity target", loc="lower right")
-    fig.suptitle("Clinical-only Logistic Regression: S85 vs S90 vs S95", fontsize=13, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.savefig(out_path, dpi=220)
-    plt.close(fig)
-
-
+# AUC=0.5 대비 유의성은 Mann-Whitney U, CI는 y층화 percentile bootstrap으로 산출
 def auc_significance_stats(y: np.ndarray, score: np.ndarray, n_boot: int = 3000, seed: int = SEED) -> dict:
-    # AUC vs 0.5 significance: Mann-Whitney U on the score is the rank-based test
-    # equivalent to "is AUC different from chance" (U relates to AUC by AUC = U / (n_pos*n_neg)).
-    # CI on AUC itself comes from a percentile bootstrap stratified on y (resample
-    # positives and negatives separately so every resample keeps both classes present).
     auc = roc_auc_score(y, score)
     pos, neg = score[y == 1], score[y == 0]
     u_stat, p_value = stats.mannwhitneyu(pos, neg, alternative="two-sided")
@@ -183,10 +148,8 @@ def auc_significance_stats(y: np.ndarray, score: np.ndarray, n_boot: int = 3000,
             "mannwhitney_u": float(u_stat), "p_value": float(p_value)}
 
 
+# AUC를 핵심 수치로 크게 강조 표시하고 CI/p-value/n은 보조 텍스트로 배치
 def _draw_roc(ax: Axes, y: np.ndarray, score: np.ndarray, auc_stats: dict, title: str) -> None:
-    # AUC is the headline number, so it gets hero-figure treatment (large, bold, in
-    # the plot's dead space below the curve) instead of being buried at legend font
-    # size -- CI/p-value/n ride underneath it as a de-emphasized secondary line.
     INK_PRIMARY = "#161616"
     INK_MUTED = "#6b6a66"
     CURVE_COLOR = "#2a78d6"
@@ -198,10 +161,9 @@ def _draw_roc(ax: Axes, y: np.ndarray, score: np.ndarray, auc_stats: dict, title
     ax.plot(fpr, tpr, color=CURVE_COLOR, linewidth=2.5, solid_capstyle="round")
     ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1)
 
-    for target_sens in TARGET_SENSITIVITIES:
-        ax.axhline(target_sens, color=INK_MUTED, linestyle=":", linewidth=1, alpha=0.7, zorder=0)
-        ax.text(0.02, target_sens + 0.012, f"Se={target_sens:.2f}", ha="left", va="bottom",
-                fontsize=8.5, color=INK_MUTED)
+    ax.axhline(TARGET_SENSITIVITY, color=INK_MUTED, linestyle=":", linewidth=1, alpha=0.7, zorder=0)
+    ax.text(0.02, TARGET_SENSITIVITY + 0.012, f"Se={TARGET_SENSITIVITY:.2f}", ha="left", va="bottom",
+            fontsize=8.5, color=INK_MUTED)
 
     ax.text(0.97, 0.16, f"AUC = {auc_stats['auc']:.3f}", ha="right", va="bottom",
             fontsize=26, fontweight="bold", color=INK_PRIMARY, transform=ax.transAxes)
@@ -220,18 +182,8 @@ def _draw_roc(ax: Axes, y: np.ndarray, score: np.ndarray, auc_stats: dict, title
         ax.spines[spine].set_visible(False)
 
 
-def plot_roc_curve(y: np.ndarray, score: np.ndarray, auc_stats: dict, out_path: Path, title: str) -> None:
-    fig, ax = plt.subplots(figsize=(6.5, 6.5))
-    _draw_roc(ax, y, score, auc_stats, title)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=220, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved ROC curve to {out_path}")
-
-
+# 코호트별(internal/external) ROC를 한 figure에 나란히 배치
 def plot_roc_curve_dual(rows: list[tuple[np.ndarray, np.ndarray, dict, str]], out_path: Path) -> None:
-    # Same per-panel drawing as plot_roc_curve, side by side (e.g. internal/external)
-    # in one figure -- for clinical_only_roc_curve.png, which used to be internal-only.
     fig, axes = plt.subplots(1, len(rows), figsize=(6.5 * len(rows), 6.5))
     axes = np.atleast_1d(axes)
     for ax, (y, score, auc_stats, title) in zip(axes, rows):
@@ -242,9 +194,8 @@ def plot_roc_curve_dual(rows: list[tuple[np.ndarray, np.ndarray, dict, str]], ou
     print(f"Saved ROC curve to {out_path}")
 
 
+# 환자별 feature/score에 TP/FN/FP/TN 그룹 라벨을 붙인 테이블(재사용 목적)
 def build_group_rows(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray, th: float) -> pd.DataFrame:
-    # Per-patient feature/score table with TP/FN/FP/TN group labels, for reuse by
-    # error_feature_analysis and any downstream stage that needs the same rows.
     age = pd.to_numeric(meta["PatientAge"], errors="coerce").to_numpy(dtype=float)
     height = pd.to_numeric(meta["Height"], errors="coerce").to_numpy(dtype=float)
     weight = pd.to_numeric(meta["Weight"], errors="coerce").to_numpy(dtype=float)
@@ -267,6 +218,7 @@ def build_group_rows(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray, th: f
     })
 
 
+# TP/FN/FP/TN 그룹별 feature 차이(평균, t-test, 카이제곱)를 markdown 리포트로 저장
 def error_feature_analysis(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray, th: float, model: LogisticRegression, out_dir: Path) -> None:
     rows = build_group_rows(meta, y, score, th)
     rows.to_csv(out_dir / "error_feature_analysis_rows.csv", index=False)
@@ -363,10 +315,11 @@ def error_feature_analysis(meta: pd.DataFrame, y: np.ndarray, score: np.ndarray,
     print(f"Saved error feature analysis to {out_dir / 'error_feature_analysis.md'}")
 
 
+# internal로 학습/평가 후 external에 고정 모델 적용, ROC/혼동행렬/에러분석 산출
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # --- internal: fit standardizer once on internal only ---
+    # internal 코호트로만 standardizer 학습
     meta_int, y_int = load_cohort(INTERNAL_XLSX)
     x_raw_int = raw_clinical_matrix(meta_int)
     med, mu, sd = fit_clinical_standardizer(x_raw_int)
@@ -395,52 +348,21 @@ def main() -> None:
         (y_ext, score_ext, auc_stats_ext, "Clinical-only Logistic Regression: ROC (external, frozen internal model)"),
     ], OUTPUT_DIR / "clinical_only_roc_curve.png")
 
-    all_results = []
-    summary_rows = []
-    th90 = None
-    for target in TARGET_SENSITIVITIES:
-        th = threshold_for_sensitivity(y_int, oof, target)
-        if target == 0.90:
-            th90 = th
-        result_int = evaluate("internal", y_int, oof >= th, th)
-        result_ext = evaluate("external", y_ext, score_ext >= th, th)
-        result_int["target"] = target
-        result_ext["target"] = target
-        all_results.extend([result_int, result_ext])
+    th = threshold_for_sensitivity(y_int, oof, TARGET_SENSITIVITY)
+    result_int = evaluate("internal", y_int, oof >= th, th)
+    result_ext = evaluate("external", y_ext, score_ext >= th, th)
 
-        fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
-        fig.suptitle(f"Clinical-only Logistic Regression (S{target * 100:.0f})", fontsize=13, fontweight="bold")
-        plot_confusion_matrix(axes[0], result_int)
-        plot_confusion_matrix(axes[1], result_ext)
-        fig.tight_layout(rect=(0, 0, 1, 0.95))
-        out_path = OUTPUT_DIR / f"clinical_only_confusion_matrix_sens{int(target * 100)}.png"
-        fig.savefig(out_path, dpi=220)
-        plt.close(fig)
-        print(f"Saved confusion matrix to {out_path}")
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
+    fig.suptitle(f"Clinical-only Logistic Regression (S{TARGET_SENSITIVITY * 100:.0f})", fontsize=13, fontweight="bold")
+    plot_confusion_matrix(axes[0], result_int)
+    plot_confusion_matrix(axes[1], result_ext)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    out_path = OUTPUT_DIR / f"clinical_only_confusion_matrix_sens{int(TARGET_SENSITIVITY * 100)}.png"
+    fig.savefig(out_path, dpi=220)
+    plt.close(fig)
+    print(f"Saved confusion matrix to {out_path}")
 
-        for result in (result_int, result_ext):
-            summary_rows.append({
-                "target_sensitivity": target,
-                "cohort": result["cohort"],
-                "threshold": result["th"],
-                "sensitivity": result["sens"],
-                "specificity": result["spec"],
-                "ppv": result["ppv"],
-                "npv": result["npv"],
-                "n": int(result["matrix"].sum()),
-            })
-
-    assert th90 is not None, "0.90 must be in TARGET_SENSITIVITIES for error_feature_analysis"
-    error_feature_analysis(meta_int, y_int, oof, th90, model, OUTPUT_DIR)
-
-    summary_df = pd.DataFrame(summary_rows)
-    summary_path = OUTPUT_DIR / "clinical_only_sensitivity_comparison.csv"
-    summary_df.to_csv(summary_path, index=False)
-    print(f"Saved comparison table to {summary_path}")
-
-    comparison_fig_path = OUTPUT_DIR / "clinical_only_sensitivity_comparison.png"
-    plot_comparison_summary(all_results, comparison_fig_path)
-    print(f"Saved comparison figure to {comparison_fig_path}")
+    error_feature_analysis(meta_int, y_int, oof, th, model, OUTPUT_DIR)
 
 
 if __name__ == "__main__":

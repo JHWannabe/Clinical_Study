@@ -1,0 +1,2 @@
+﻿cohort,normalization,sex,fft_scale,n_tp,n_fp,image_rmsd,peak_freq_x_cycle,peak_freq_y_cycle,peak_deviation,direction,n_perm,p_value
+sinchon,global_zscore,F,log,36,167,0.00016245321417567715,0.0,3.0,0.0019176212591764262,TP > FP,2000,0.2518740629685157

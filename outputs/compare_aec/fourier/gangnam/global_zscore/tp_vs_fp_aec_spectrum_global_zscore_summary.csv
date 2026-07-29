@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,spectrum_rmsd,peak_freq_cycle,peak_deviation,direction,n_perm,p_value
+gangnam,global_zscore,117,447,0.0034220713483653496,3,-0.012423367737186108,TP < FP,2000,0.5292353823088456

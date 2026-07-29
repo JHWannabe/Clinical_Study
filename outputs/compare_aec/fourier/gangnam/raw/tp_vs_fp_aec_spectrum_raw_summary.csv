@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,spectrum_rmsd,peak_freq_cycle,peak_deviation,direction,n_perm,p_value
+gangnam,raw,117,447,0.33852474682865646,3,-1.228968361515662,TP < FP,2000,0.5292353823088456

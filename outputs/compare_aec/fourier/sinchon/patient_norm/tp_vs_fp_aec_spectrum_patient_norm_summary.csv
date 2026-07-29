@@ -1,0 +1,2 @@
+﻿cohort,normalization,n_tp,n_fp,spectrum_rmsd,peak_freq_cycle,peak_deviation,direction,n_perm,p_value
+sinchon,patient_norm,131,398,0.001510052582660876,2,0.008533049225033042,TP > FP,2000,0.3448275862068966
