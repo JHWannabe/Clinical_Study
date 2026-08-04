@@ -1,2 +1,0 @@
-﻿cohort,normalization,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
-gangnam,global_zscore,117,447,0.10175707622274723,1,-0.1364902413447606,TP < FP,2000,0.25337331334332835

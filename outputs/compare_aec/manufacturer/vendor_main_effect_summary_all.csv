@@ -1,3 +1,0 @@
-﻿cohort,vendors,n_per_vendor,between_vendor_rmsd,n_perm,p_value
-gangnam,"['Sensation 64', 'Revolution CT', 'Ingenuity Core 128', 'SOMATOM Definition AS+']","[187, 136, 131, 106]",38.57907431925573,2000,0.0004997501249375312
-sinchon,"['SOMATOM Definition Flash', 'Revolution EVO', 'SOMATOM Definition AS+', 'iCT 256', 'SOMATOM Force', 'LightSpeed VCT', 'Sensation 64']","[130, 92, 89, 73, 73, 29, 26]",41.353029505289975,2000,0.0004997501249375312

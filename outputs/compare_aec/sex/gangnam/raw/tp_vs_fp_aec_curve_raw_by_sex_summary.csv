@@ -1,3 +1,0 @@
-﻿cohort,normalization,sex,n_tp,n_fp,curve_rmsd,peak_slice,peak_deviation,direction,n_perm,p_value
-gangnam,raw,M,72,217,28.577549487047293,82,-36.94924667178691,TP < FP,2000,0.018490754622688656
-gangnam,raw,F,45,230,4.666540390087308,2,10.74140579710155,TP > FP,2000,0.8445777111444278

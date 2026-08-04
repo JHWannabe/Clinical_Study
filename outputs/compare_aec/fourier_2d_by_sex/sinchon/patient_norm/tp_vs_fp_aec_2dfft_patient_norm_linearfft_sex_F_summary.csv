@@ -1,2 +1,0 @@
-﻿cohort,normalization,sex,fft_scale,n_tp,n_fp,image_rmsd,peak_freq_x_cycle,peak_freq_y_cycle,peak_deviation,direction,n_perm,p_value
-sinchon,patient_norm,F,linear,36,167,0.00014606360100114416,3.0,-9.0,0.001053984167386134,TP > FP,2000,0.8895552223888056

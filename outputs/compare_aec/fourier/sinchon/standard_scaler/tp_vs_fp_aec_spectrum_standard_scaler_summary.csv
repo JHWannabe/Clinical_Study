@@ -1,2 +1,0 @@
-﻿cohort,normalization,n_tp,n_fp,spectrum_rmsd,peak_freq_cycle,peak_deviation,direction,n_perm,p_value
-sinchon,standard_scaler,131,398,0.0040155578149603036,2,0.029153310533697088,TP > FP,2000,0.2938530734632684
