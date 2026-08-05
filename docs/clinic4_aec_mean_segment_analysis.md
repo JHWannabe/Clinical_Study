@@ -1,5 +1,16 @@
 # clinic4 + AEC 구간평균 선형회귀: internal 선택 → external 단일검증 결과
 
+> **주의(2026-08-04)**: 아래에서 참조하는 원자료 CSV 4종(`outputs/clinic_aec_mean_linear_regression_summary.csv`,
+> `outputs/clinic4_vs_clinic4_aec_mean_r2_comparison.csv`,
+> `outputs/clinic4_aec_mean_internal_selected_external_check.csv`,
+> `outputs/clinic4_aec_mean_external_paired_bootstrap.csv`)는 git 이력에 없고 현재
+> `outputs/` 어디에도 존재하지 않는다(로컬 1회성 산출물이었던 것으로 보임). 대신
+> `outputs/step1/step_ci_significance_analysis.csv`가 N=1(전체평균) 케이스만 별도
+> 방식(CI overlap)으로 재현하고 있으며([[project_outputs_step_folder_reorg]] 이후
+> 구조), segment_count 1~128 전체 sweep + paired bootstrap 원자료는 없다. 이 문서의
+> 표는 삭제/미보존된 산출물에 대한 기록이며, 재검증이 필요하면
+> `code/step1_clinic_aec_mean.py`를 재실행해 원자료부터 다시 만들어야 한다.
+
 `code/step1_clinic_aec_mean.py` 출력(`outputs/clinic_aec_mean_linear_regression_summary.csv`,
 `outputs/clinic4_vs_clinic4_aec_mean_r2_comparison.csv`)에 대한 분석.
 [[internal_external_validation_protocol]] 원칙에 따라 재구성함 —

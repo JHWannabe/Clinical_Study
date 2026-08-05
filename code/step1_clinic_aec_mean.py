@@ -63,14 +63,17 @@ def load_cohort(xlsx_path: Path) -> pd.DataFrame:
     return merged
 
 
-# sex/age/height/weight 행렬 구성 + 표준화(sex 제외) + (있으면) AEC 구간평균 결합. scaler 생략 시 새로 학습(내부 코호트용)
-def clinical_matrix(meta: pd.DataFrame, aec: np.ndarray | None = None, scaler: StandardScaler | None = None):
-    sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float)
+# age/height/weight 행렬 구성 + 표준화 + (include_sex시) sex 열 + (있으면) AEC 구간평균 결합. scaler 생략 시 새로 학습(내부 코호트용).
+# 성별을 고정한 남/여 개별 실행에서는 sex가 상수가 되어 계수가 무의미해지므로 include_sex=False로 제외
+def clinical_matrix(meta: pd.DataFrame, aec: np.ndarray | None = None, scaler: StandardScaler | None = None,
+                     include_sex: bool = True):
     rest = meta[["PatientAge", "Height", "Weight"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
     if scaler is None:
         scaler = StandardScaler().fit(rest)
-    clinic4 = np.column_stack([sex_m, scaler.transform(rest)])
-    x = clinic4 if aec is None else np.column_stack([clinic4, aec])
+    scaled = scaler.transform(rest)
+    clinic = scaled if not include_sex else np.column_stack(
+        [(meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float), scaled])
+    x = clinic if aec is None else np.column_stack([clinic, aec])
     return x, scaler
 
 
@@ -154,11 +157,8 @@ def plot_scatter_dual(rows: list[tuple[np.ndarray, np.ndarray, dict, str]], out_
     print(f"Saved scatter plot to {out_path}")
 
 
-CORRELATION_CSV = OUTPUT_DIR / "clinical_only_feature_correlations.csv"
-
-
 # 통합 상관계수 CSV에서 이 스크립트가 소유한 predictor_group만 교체 저장, 다른 스크립트가 쓴 predictor_group(clinic4 등)은 보존
-def write_correlation_rows(rows: list[dict], predictor_group: str) -> None:
+def write_correlation_rows(rows: list[dict], predictor_group: str, correlation_csv: Path) -> None:
     new_df = pd.DataFrame(rows)
     new_df["predictor_group"] = predictor_group
     if "predictor" not in new_df.columns:
@@ -166,15 +166,15 @@ def write_correlation_rows(rows: list[dict], predictor_group: str) -> None:
     for col in ("n_seg", "segment"):
         if col not in new_df.columns:
             new_df[col] = np.nan
-    if CORRELATION_CSV.exists():
-        old_df = pd.read_csv(CORRELATION_CSV)
+    if correlation_csv.exists():
+        old_df = pd.read_csv(correlation_csv)
         old_df = old_df[old_df["predictor_group"] != predictor_group]
         combined = pd.concat([old_df, new_df], ignore_index=True)
     else:
         combined = new_df
     cols = ["feature", "cohort", "predictor_group", "predictor", "n_seg", "segment", "r", "p_value", "n"]
-    combined[cols].to_csv(CORRELATION_CSV, index=False)
-    print(f"Saved correlation rows (predictor_group={predictor_group}) to {CORRELATION_CSV}")
+    combined[cols].to_csv(correlation_csv, index=False)
+    print(f"Saved correlation rows (predictor_group={predictor_group}) to {correlation_csv}")
 
 
 # output feature 각각과 구간 수 n_seg의 AEC 구간평균 각 구간 간 단순 Pearson r/p를 산출
@@ -227,7 +227,7 @@ def plot_feature_clinic4_aec_mean_corr_heatmap(corr_df: pd.DataFrame, input_cols
                         fontsize=9, color="white" if abs(r_val) > 0.5 else INK_PRIMARY)
 
         ax.set_xticks(range(len(input_cols)))
-        ax.set_xticklabels([predictor_labels[c] for c in input_cols], rotation=30, ha="right")
+        ax.set_xticklabels([predictor_labels[c] for c in input_cols])
         ax.set_yticks(range(len(features)))
         ax.set_yticklabels(features)
         ax.set_title(f"{cohort}", fontsize=12, fontweight="bold", color=INK_PRIMARY)
@@ -402,25 +402,14 @@ def plot_segment_trend(pivot_int: pd.DataFrame, pivot_ext: pd.DataFrame, model_o
     print(f"Saved segment trend plot to {out_path}")
 
 
-# clinic 4개(sex/age/height/weight)만 쓴 baseline과, clinic 4개+AEC 구간평균(SEGMENT_COUNTS구간)을 쓴 모델들을 나란히 학습/평가.
+# clinic 4개(sex/age/height/weight, include_sex=False면 clinic3=age/height/weight)만 쓴 baseline과,
+# clinic4/3 + AEC 구간평균(SEGMENT_COUNTS구간)을 쓴 모델들을 나란히 학습/평가.
 # internal로 학습/평가 후 external에 고정 모델 적용, feature별 R^2/산점도/계수를 산출하고 baseline 대비 delta를 비교
-def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    meta_int, meta_ext = load_cohort(INTERNAL_XLSX), load_cohort(EXTERNAL_XLSX)
-
-    clinical_cols = ["PatientAge", "Height", "Weight"]
-
-    def valid_clinical_rows(meta: pd.DataFrame) -> np.ndarray:
-        vals = meta[clinical_cols].apply(pd.to_numeric, errors="coerce")
-        return vals.notna().all(axis=1).to_numpy()
-
-    mask_clinical_int = valid_clinical_rows(meta_int)
-    mask_clinical_ext = valid_clinical_rows(meta_ext)
-    print(f"Clinical input 결측 제외: internal {(~mask_clinical_int).sum()}/{len(mask_clinical_int)}, "
-          f"external {(~mask_clinical_ext).sum()}/{len(mask_clinical_ext)}")
-    meta_int = meta_int[mask_clinical_int].reset_index(drop=True)
-    meta_ext = meta_ext[mask_clinical_ext].reset_index(drop=True)
+def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, include_sex: bool) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    correlation_csv = output_dir / "clinical_only_feature_correlations.csv"
+    clinic_cols = (["sex_M"] if include_sex else []) + ["age_z", "height_z", "weight_z"]
+    clinic_coef_names = (["sex_M"] if include_sex else []) + ["age", "height", "weight"]
 
     cv = KFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
 
@@ -431,15 +420,15 @@ def main() -> None:
     for n_seg in SEGMENT_COUNTS:
         corr_rows += feature_aec_correlations(segment_means(aec_int_raw, n_seg), meta_int, n_seg, "internal")
         corr_rows += feature_aec_correlations(segment_means(aec_ext_raw, n_seg), meta_ext, n_seg, "external")
-    write_correlation_rows(corr_rows, "aec_segment")
+    write_correlation_rows(corr_rows, "aec_segment", correlation_csv)
     corr_df = pd.DataFrame(corr_rows)
     plot_feature_aec_correlation_heatmap(corr_df, SEGMENT_COUNTS,
-                                          OUTPUT_DIR / "clinical_only_feature_aec_segment_correlation_heatmap.png")
+                                          output_dir / "clinical_only_feature_aec_segment_correlation_heatmap.png")
 
     model_order = ["clinic4"]
     models = {"clinic4": {"aec_int": None, "aec_ext": None,
-                           "input_cols": ["sex_M", "age_z", "height_z", "weight_z"],
-                           "coef_names": ["sex_M", "age", "height", "weight", "intercept"]}}
+                           "input_cols": list(clinic_cols),
+                           "coef_names": clinic_coef_names + ["intercept"]}}
     for n_seg in SEGMENT_COUNTS:
         aec_cols = segment_col_names(n_seg)
         model_name = "clinic4_aec_mean" if n_seg == 1 else f"clinic4_aec_mean{n_seg}"
@@ -447,13 +436,13 @@ def main() -> None:
         models[model_name] = {
             "aec_int": segment_means(aec_int_raw, n_seg),
             "aec_ext": segment_means(aec_ext_raw, n_seg),
-            "input_cols": ["sex_M", "age_z", "height_z", "weight_z"] + aec_cols,
-            "coef_names": ["sex_M", "age", "height", "weight"] + aec_cols + ["intercept"],
+            "input_cols": clinic_cols + aec_cols,
+            "coef_names": clinic_coef_names + aec_cols + ["intercept"],
         }
 
     for model_name, spec in models.items():
-        x_int_all, scaler = clinical_matrix(meta_int, spec["aec_int"])
-        x_ext_all, _ = clinical_matrix(meta_ext, spec["aec_ext"], scaler)
+        x_int_all, scaler = clinical_matrix(meta_int, spec["aec_int"], include_sex=include_sex)
+        x_ext_all, _ = clinical_matrix(meta_ext, spec["aec_ext"], scaler, include_sex=include_sex)
         spec["x_int_all"], spec["x_ext_all"] = x_int_all, x_ext_all
 
         spec["io_int_df"] = pd.DataFrame(x_int_all, columns=spec["input_cols"])
@@ -468,13 +457,13 @@ def main() -> None:
         + feature_clinic4_aec_mean_correlations(clinic4_mean_spec["x_ext_all"], meta_ext,
                                                  clinic4_mean_spec["input_cols"], "external")
     )
-    write_correlation_rows(clinic4_mean_corr_rows, "clinic4_aec_mean")
+    write_correlation_rows(clinic4_mean_corr_rows, "clinic4_aec_mean", correlation_csv)
     plot_feature_clinic4_aec_mean_corr_heatmap(
         pd.DataFrame(clinic4_mean_corr_rows), clinic4_mean_spec["input_cols"],
-        OUTPUT_DIR / "clinical_only_feature_clinic4_aec_mean_correlation_heatmap.png")
+        output_dir / "clinical_only_feature_clinic4_aec_mean_correlation_heatmap.png")
     plot_feature_aec_mean_only_corr_heatmap(
         pd.DataFrame(clinic4_mean_corr_rows),
-        OUTPUT_DIR / "clinical_only_feature_aec_mean_only_correlation_heatmap.png")
+        output_dir / "clinical_only_feature_aec_mean_only_correlation_heatmap.png")
 
     clinic4_aec_corr_rows = (
         clinic4_vs_aec_mean_correlations(clinic4_mean_spec["x_int_all"], clinic4_mean_spec["input_cols"], "internal")
@@ -482,7 +471,7 @@ def main() -> None:
     )
     plot_clinic4_vs_aec_mean_corr_heatmap(
         pd.DataFrame(clinic4_aec_corr_rows), clinic4_mean_spec["input_cols"],
-        OUTPUT_DIR / "clinic4_vs_aec_mean_correlation_heatmap.png")
+        output_dir / "clinic4_vs_aec_mean_correlation_heatmap.png")
 
     summary_rows = []
     for feat, slug in FEATURES.items():
@@ -494,7 +483,7 @@ def main() -> None:
         y_int = y_int_all[mask_int]
         y_ext = y_ext_all[mask_ext]
 
-        feat_dir = OUTPUT_DIR / slug
+        feat_dir = output_dir / slug
         feat_dir.mkdir(parents=True, exist_ok=True)
 
         model_stats = {}
@@ -546,8 +535,8 @@ def main() -> None:
 
     int_sheets = {sheet_name_for(m): spec["io_int_df"] for m, spec in models.items() if m != "clinic4"}
     ext_sheets = {sheet_name_for(m): spec["io_ext_df"] for m, spec in models.items() if m != "clinic4"}
-    write_sheets(OUTPUT_DIR / "gangnam_io.xlsx", int_sheets)
-    write_sheets(OUTPUT_DIR / "sinchon_io.xlsx", ext_sheets)
+    write_sheets(output_dir / "gangnam_io.xlsx", int_sheets)
+    write_sheets(output_dir / "sinchon_io.xlsx", ext_sheets)
 
     summary = pd.DataFrame(summary_rows)
 
@@ -566,13 +555,40 @@ def main() -> None:
 
     # 이 스크립트가 소유한 시트(regression_summary/r2_comparison)만 교체 저장.
     # 다른 파생 분석(generalization_gap 등)이 쓰는 시트는 clinic4_aec_mean_summary.xlsx에 그대로 보존됨
-    summary_path = OUTPUT_DIR / "clinic4_aec_mean_summary.xlsx"
+    summary_path = output_dir / "clinic4_aec_mean_summary.xlsx"
     write_sheets(summary_path, {
         "regression_summary": summary,
         "r2_comparison": pivot.reset_index(),
     })
 
-    plot_segment_trend(pivot, pivot_ext, model_order, OUTPUT_DIR / "clinic4_aec_mean_segment_r2_trend.png")
+    plot_segment_trend(pivot, pivot_ext, model_order, output_dir / "clinic4_aec_mean_segment_r2_trend.png")
+
+
+# internal/external 코호트를 로드/전처리 후 전체(sex 포함)/남성만/여성만 3가지로 나눠 run()을 각각 실행
+def main() -> None:
+    meta_int, meta_ext = load_cohort(INTERNAL_XLSX), load_cohort(EXTERNAL_XLSX)
+
+    clinical_cols = ["PatientAge", "Height", "Weight"]
+
+    def valid_clinical_rows(meta: pd.DataFrame) -> np.ndarray:
+        vals = meta[clinical_cols].apply(pd.to_numeric, errors="coerce")
+        return vals.notna().all(axis=1).to_numpy()
+
+    mask_clinical_int = valid_clinical_rows(meta_int)
+    mask_clinical_ext = valid_clinical_rows(meta_ext)
+    print(f"Clinical input 결측 제외: internal {(~mask_clinical_int).sum()}/{len(mask_clinical_int)}, "
+          f"external {(~mask_clinical_ext).sum()}/{len(mask_clinical_ext)}")
+    meta_int = meta_int[mask_clinical_int].reset_index(drop=True)
+    meta_ext = meta_ext[mask_clinical_ext].reset_index(drop=True)
+
+    sex_int = meta_int["PatientSex"].astype(str).str.upper()
+    sex_ext = meta_ext["PatientSex"].astype(str).str.upper()
+
+    run(meta_int, meta_ext, OUTPUT_DIR / "total", include_sex=True)
+    for sex_label, sub_dir in (("M", OUTPUT_DIR / "male"), ("F", OUTPUT_DIR / "female")):
+        print(f"\n=== sex={sex_label} ({sub_dir.name}) ===")
+        run(meta_int[sex_int == sex_label].reset_index(drop=True),
+            meta_ext[sex_ext == sex_label].reset_index(drop=True), sub_dir, include_sex=False)
 
 
 if __name__ == "__main__":

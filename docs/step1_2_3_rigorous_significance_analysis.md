@@ -1,11 +1,23 @@
 # Step1~3(AEC 추가 실험) 확증적 통계 검정 — paired bootstrap 재분석
 
-`docs/clinic4_aec_mean_segment_analysis.md`가 Step3 구간수 sweep(`step1_clinic_aec_mean.py`)에
+> **주의(2026-08-04, [[project_outputs_step_folder_reorg]])**: 이 문서 작성 당시의
+> Step2/Step3 번호는 `code/`의 **구 매핑**(step2=shape, step3=back_half+segment_select)
+> 기준이다. 260804 재편으로 `outputs/`가 `code/`의 step0~3와 1:1 대응하도록 폴더가
+> 바뀌면서 **번호가 반대로 뒤집혔다**(현재는 step2=back_half+segment_select,
+> step3=shape). 아래 본문의 "Step2"·"Step3" 표기와 스크립트 파일명은 **현재 코드
+> 기준으로 갱신**했으나, 이 분석의 원자료였던 `outputs/step3_topk_backhalf_rigorous_significance.csv`는
+> 재편 과정에서 **삭제되어 현재 리포지토리에 존재하지 않는다**(git status 기준,
+> `outputs/step1/step_ci_significance_analysis.csv`만 유효하게 남아 있음). 즉 아래
+> Step2·Step3 표는 삭제 전 마지막 계산 결과를 기록으로만 보존한 것이며, 재검증이
+> 필요하면 스크립트를 다시 실행해 원자료를 재생성해야 한다.
+
+`docs/clinic4_aec_mean_segment_analysis.md`가 Step1 구간수 sweep(`step1_clinic_aec_mean.py`)에
 적용한 프로토콜(**internal 5-fold OOF로 feature별 최적 config를 먼저 확정 → 그 config
 하나만 external에 paired bootstrap(5,000회, clinic4 vs AEC모델을 동일 리샘플 인덱스로
 동시 재표집한 ΔR²) 단일 검증**, [[internal_external_validation_protocol]])를 Step1
-(`step1_clinic_aec_mean.py`의 N=1)·Step2(`step2_clinic_aec_shape.py`)·Step3 top-k(`step3_clinic_aec_segment_select.py`)·
-Step3 앞/뒤50%(`step3_clinic_aec_back_half.py`) 나머지 3개 실험에도 동일하게 적용해 재검증했다.
+(`step1_clinic_aec_mean.py`의 N=1)·Step2 top-k(`step2_clinic_aec_segment_select.py`)·
+Step2 앞/뒤50%(`step2_clinic_aec_back_half.py`)·Step3(`step3_clinic_aec_shape.py`) 나머지
+3개 실험에도 동일하게 적용해 재검증했다.
 
 기존 slide 7~15의 다수 불릿(예: "VAT top8 external +0.09")은 k=1~8 또는 segment=1~128을
 전부 external과 대조해 그중 눈에 띄는 값을 골라 인용한 것이라 **다중비교(multiple
@@ -18,9 +30,9 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 2. 그 config 하나만 external(sinchon)에 동결 적용, clinic4 baseline과 **동일 환자
    리샘플 인덱스**로 5,000회 paired bootstrap → ΔR²의 95% CI 산출.
 3. CI가 0을 포함하지 않으면 "유의", 포함하면 "n.s."로 판정.
-4. 재현 스크립트: `code/step1_clinic_aec_mean.py`(Step1: N=1 고정)·`code/step2_clinic_aec_shape.py`(Step2)·
-   `code/step3_clinic_aec_segment_select.py`(Step3 top-k)·`code/step3_clinic_aec_back_half.py`(Step3 앞/뒤50%)의
-   모델 fitting 로직을 그대로 재현 후 paired bootstrap만 추가. 원자료:
+4. 재현 스크립트: `code/step1_clinic_aec_mean.py`(Step1: N=1 고정)·`code/step3_clinic_aec_shape.py`(Step3)·
+   `code/step2_clinic_aec_segment_select.py`(Step2 top-k)·`code/step2_clinic_aec_back_half.py`(Step2 앞/뒤50%)의
+   모델 fitting 로직을 그대로 재현 후 paired bootstrap만 추가. 원자료(현재 삭제됨):
    `outputs/step3_topk_backhalf_rigorous_significance.csv`.
 
 ## 결과
@@ -40,7 +52,7 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 **7개 feature 전부 external에서 통계적으로 유의하게 악화** — 예외 없음. 정보를 1개
 숫자로 극단적으로 압축하면 어떤 체성분 feature에도 도움이 안 된다.
 
-### Step2 — 곡선 형태 feature(SD·Skewness·상하위50%비율), feature별 internal-best 확정 후 단일검증
+### Step3 — 곡선 형태 feature(SD·Skewness·상하위50%비율), feature별 internal-best 확정 후 단일검증
 
 | feature | internal-best | external R² (Δ) | 95% CI (Δ) | 판정 |
 |---|---|---|---|---|
@@ -52,7 +64,7 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 | NAMA | shape_all | 0.451 (-0.117) | [-0.141, -0.094] | **유의(악화)** |
 | TAMA | shape_all | 0.672 (-0.039) | [-0.050, -0.029] | **유의(악화)** |
 
-### Step3 top-k 구간선택, feature별 internal-best k 확정 후 단일검증
+### Step2 top-k 구간선택, feature별 internal-best k 확정 후 단일검증
 
 | feature | internal-best k | external R² (Δ) | 95% CI (Δ) | 판정 |
 |---|---|---|---|---|
@@ -64,7 +76,7 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 | NAMA | top3 | 0.436 (-0.132) | [-0.158, -0.109] | **유의(악화)** |
 | TAMA | top6 | 0.676 (-0.035) | [-0.046, -0.025] | **유의(악화)** |
 
-### Step3 앞/뒤 50% 단독 사용, feature별 internal-best(앞 또는 뒤) 확정 후 단일검증
+### Step2 앞/뒤 50% 단독 사용, feature별 internal-best(앞 또는 뒤) 확정 후 단일검증
 
 | feature | internal-best | external R² (Δ) | 95% CI (Δ) | 판정 |
 |---|---|---|---|---|
@@ -77,19 +89,19 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 | Total Fat | back50 | 0.446 (-0.046) | [-0.071, -0.021] | **유의(악화)** |
 
 **7개 feature 전부 유의하게 악화 — 지방계열도 예외 없음.** 곡선을 반으로 쪼개 한쪽
-절반만 단독으로 쓰는 방식은 정보 손실이 너무 커서 항상 해롭다(Step2/Step3 top-k처럼
-여러 정보를 결합해야 이득이 나타남).
+절반만 단독으로 쓰는 방식은 정보 손실이 너무 커서 항상 해롭다(Step3 형태feature/Step2
+top-k처럼 여러 정보를 결합해야 이득이 나타남).
 
 ## 종합 해석
 
-4개 실험(Step1 단일평균, Step2 형태feature, Step3 top-k, Step3 앞/뒤50%)을 관통하는
+4개 실험(Step1 단일평균, Step3 형태feature, Step2 top-k, Step2 앞/뒤50%)을 관통하는
 일관된 패턴:
 
 1. **NAMA·TAMA(근육계열)는 AEC를 어떤 방식으로 추가해도 예외 없이 유의하게 악화된다**
    — 4개 실험 전부에서 확증. 근육 관련 AEC 상관이 원래 약하기 때문(NAMA 전 구간
    |r|<0.25, `docs/output_feature_predictor_correlations` 참조).
-2. **VAT·Total Fat(지방계열)는 "정보를 충분히 담은" 표현(Step2 형태feature 결합,
-   Step3 top-k 8구간)에서만 유의하게 개선된다** — 반대로 정보를 과도하게 압축한
+2. **VAT·Total Fat(지방계열)는 "정보를 충분히 담은" 표현(Step3 형태feature 결합,
+   Step2 top-k 8구간)에서만 유의하게 개선된다** — 반대로 정보를 과도하게 압축한
    표현(Step1 단일평균, 앞/뒤50% 단독)에서는 VAT·Total Fat도 똑같이 유의하게
    악화된다. 즉 "지방계열엔 AEC가 도움된다"는 무조건 참이 아니라, **곡선의 정보를
    일정 수준 이상 보존해야만** 성립하는 조건부 결론이다.
@@ -102,8 +114,9 @@ comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_vali
 
 ## 참고
 
-- 선행 분석(Step3 구간수 sweep 전용): `docs/clinic4_aec_mean_segment_analysis.md`
+- 선행 분석(Step1 구간수 sweep 전용): `docs/clinic4_aec_mean_segment_analysis.md`
 - 방법론 원칙: `docs/internal_external_validation_protocol.md`,
   [[feedback_internal_external_validation_discipline]]
-- 원자료: `outputs/step3_topk_backhalf_rigorous_significance.csv`(Step2/top-k/앞뒤50%),
-  Step1(N=1)은 이 문서의 표에만 기재(재현 스크립트는 위 "방법" 절 참고)
+- 원자료: `outputs/step3_topk_backhalf_rigorous_significance.csv`(Step2 top-k/앞뒤50%,
+  Step3 형태feature) — **삭제됨, 위 표는 기록 보존용**. Step1(N=1)은 이 문서의
+  표에만 기재(재현 스크립트는 위 "방법" 절 참고)

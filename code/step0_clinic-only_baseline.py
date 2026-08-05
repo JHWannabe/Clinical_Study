@@ -42,13 +42,17 @@ def load_cohort(xlsx_path: Path) -> pd.DataFrame:
     return pd.read_excel(xlsx_path, sheet_name="metadata", engine="openpyxl").reset_index(drop=True)
 
 
-# sex/age/height/weight 행렬 구성 + 표준화(sex 제외). scaler 생략 시 새로 학습(내부 코호트용)
-def clinical_matrix(meta: pd.DataFrame, scaler: StandardScaler | None = None):
-    sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float)
+# age/height/weight 행렬 구성 + 표준화 + (include_sex시) sex 열 추가. scaler 생략 시 새로 학습(내부 코호트용).
+# 성별을 고정해 따로 도는 남/여 개별 실행에서는 sex가 상수가 되어 계수가 무의미해지므로 include_sex=False로 제외
+def clinical_matrix(meta: pd.DataFrame, scaler: StandardScaler | None = None, include_sex: bool = True):
     rest = meta[["PatientAge", "Height", "Weight"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
     if scaler is None:
         scaler = StandardScaler().fit(rest)
-    return np.column_stack([sex_m, scaler.transform(rest)]), scaler
+    scaled = scaler.transform(rest)
+    if not include_sex:
+        return scaled, scaler
+    sex_m = (meta["PatientSex"].astype(str).str.upper().to_numpy() == "M").astype(float)
+    return np.column_stack([sex_m, scaled]), scaler
 
 
 # R^2/RMSE/MAE/Pearson r(유의성)과 R^2의 bootstrap 95% CI를 산출
@@ -183,7 +187,7 @@ def plot_residual_diagnostics(y_int: np.ndarray, pred_int: np.ndarray, y_ext: np
 
 # 전체 feature에 걸쳐 R^2(95%CI)/RMSE/MAE/Pearson r을 internal vs external 막대그래프로 비교
 def plot_metrics_summary(summary: pd.DataFrame, out_path: Path) -> None:
-    metric_labels = {"r2": "R²", "rmse": "RMSE", "mae": "MAE", "pearson_r": "Pearson r"}
+    metric_labels = {"r2": "R²", "pearson_r": "Pearson r", "rmse": "RMSE", "mae": "MAE"}
     features = list(FEATURES.keys())
     slugs = [FEATURES[f] for f in features]
     x = np.arange(len(features))
@@ -206,7 +210,7 @@ def plot_metrics_summary(summary: pd.DataFrame, out_path: Path) -> None:
         ax.bar(x + width / 2, ext_rows[metric], width, yerr=ext_err, capsize=3,
                label="external (frozen)", color="#e2622e")
         ax.set_xticks(x)
-        ax.set_xticklabels(slugs, rotation=30, ha="right")
+        ax.set_xticklabels(slugs)
         ax.set_title(metric_labels[metric], fontsize=12, fontweight="bold", color="#161616")
         ax.grid(alpha=0.3, axis="y")
         ax.legend(fontsize=8)
@@ -217,25 +221,22 @@ def plot_metrics_summary(summary: pd.DataFrame, out_path: Path) -> None:
     print(f"Saved metrics summary plot to {out_path}")
 
 
-CORRELATION_CSV = OUTPUT_DIR / "clinical_only_feature_correlations.csv"
-
-
 # 통합 상관계수 CSV에서 이 스크립트가 소유한 predictor_group만 교체 저장, 다른 스크립트가 쓴 predictor_group(aec_segment 등)은 보존
-def write_correlation_rows(rows: list[dict], predictor_group: str) -> None:
+def write_correlation_rows(rows: list[dict], predictor_group: str, correlation_csv: Path) -> None:
     new_df = pd.DataFrame(rows)
     new_df["predictor_group"] = predictor_group
     for col in ("n_seg", "segment"):
         if col not in new_df.columns:
             new_df[col] = np.nan
-    if CORRELATION_CSV.exists():
-        old_df = pd.read_csv(CORRELATION_CSV)
+    if correlation_csv.exists():
+        old_df = pd.read_csv(correlation_csv)
         old_df = old_df[old_df["predictor_group"] != predictor_group]
         combined = pd.concat([old_df, new_df], ignore_index=True)
     else:
         combined = new_df
     cols = ["feature", "cohort", "predictor_group", "predictor", "n_seg", "segment", "r", "p_value", "n"]
-    combined[cols].to_csv(CORRELATION_CSV, index=False)
-    print(f"Saved correlation rows (predictor_group={predictor_group}) to {CORRELATION_CSV}")
+    combined[cols].to_csv(correlation_csv, index=False)
+    print(f"Saved correlation rows (predictor_group={predictor_group}) to {correlation_csv}")
 
 
 # output feature 각각과 clinic4(sex/age/height/weight) 입력변수 각각의 단순 Pearson r/p를 산출
@@ -273,7 +274,7 @@ def plot_feature_clinic4_corr_heatmap(corr_df: pd.DataFrame, input_cols: list[st
                         fontsize=9, color="white" if abs(r_val) > 0.5 else INK_PRIMARY)
 
         ax.set_xticks(range(len(input_cols)))
-        ax.set_xticklabels([predictor_labels[c] for c in input_cols], rotation=30, ha="right")
+        ax.set_xticklabels([predictor_labels[c] for c in input_cols])
         ax.set_yticks(range(len(features)))
         ax.set_yticklabels(features)
         ax.set_title(f"{cohort}", fontsize=12, fontweight="bold", color=INK_PRIMARY)
@@ -285,32 +286,17 @@ def plot_feature_clinic4_corr_heatmap(corr_df: pd.DataFrame, input_cols: list[st
     print(f"Saved feature-clinic4 correlation heatmap to {out_path}")
 
 
-# internal로 학습/평가 후 external에 고정 모델 적용, feature별 R^2/산점도/계수를 산출
-def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# internal로 학습/평가 후 external에 고정 모델 적용, feature별 R^2/산점도/계수를 산출.
+# include_sex=False면 성별이 이미 고정된 부분집합(남/여 개별 실행)이라 sex_M을 입력에서 제외하고 clinic3(age/height/weight)만 사용
+def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, include_sex: bool) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    correlation_csv = output_dir / "clinical_only_feature_correlations.csv"
 
-    meta_int, meta_ext = load_cohort(INTERNAL_XLSX), load_cohort(EXTERNAL_XLSX)
-
-    clinical_cols = ["PatientAge", "Height", "Weight"]
-
-    def valid_clinical_rows(meta: pd.DataFrame) -> np.ndarray:
-        vals = meta[clinical_cols].apply(pd.to_numeric, errors="coerce")
-        mask = vals.notna().all(axis=1).to_numpy()
-        valid_sex = meta["PatientSex"].astype(str).str.upper().isin(["M", "F"]).to_numpy()
-        return mask & valid_sex
-
-    mask_clinical_int = valid_clinical_rows(meta_int)
-    mask_clinical_ext = valid_clinical_rows(meta_ext)
-    print(f"Clinical input 결측 제외: internal {(~mask_clinical_int).sum()}/{len(mask_clinical_int)}, "
-          f"external {(~mask_clinical_ext).sum()}/{len(mask_clinical_ext)}")
-    meta_int = meta_int[mask_clinical_int].reset_index(drop=True)
-    meta_ext = meta_ext[mask_clinical_ext].reset_index(drop=True)
-
-    x_int_all, scaler = clinical_matrix(meta_int)
-    x_ext_all, _ = clinical_matrix(meta_ext, scaler)
+    x_int_all, scaler = clinical_matrix(meta_int, include_sex=include_sex)
+    x_ext_all, _ = clinical_matrix(meta_ext, scaler, include_sex=include_sex)
     cv = KFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
 
-    input_cols = ["sex_M", "age_z", "height_z", "weight_z"]
+    input_cols = (["sex_M"] if include_sex else []) + ["age_z", "height_z", "weight_z"]
     io_int_df = pd.DataFrame(x_int_all, columns=input_cols)
     io_int_df.insert(0, "PatientID", meta_int["PatientID"].to_numpy())
     io_ext_df = pd.DataFrame(x_ext_all, columns=input_cols)
@@ -337,11 +323,12 @@ def main() -> None:
         summary_rows += [{"feature": feat, "cohort": "internal", **stats_int},
                           {"feature": feat, "cohort": "external", **stats_ext}]
 
+        coef_terms = (["sex_M"] if include_sex else []) + ["age", "height", "weight", "intercept"]
         coef_df = pd.DataFrame({
-            "term": ["sex_M", "age", "height", "weight", "intercept"],
+            "term": coef_terms,
             "coefficient": np.concatenate([model.coef_.ravel(), np.atleast_1d(model.intercept_)]),
         }).round(4)
-        feat_dir = OUTPUT_DIR / slug
+        feat_dir = output_dir / slug
         feat_dir.mkdir(parents=True, exist_ok=True)
         write_sheets(feat_dir / f"{slug}_coefficients.xlsx", {"clinic4": coef_df})
 
@@ -366,19 +353,48 @@ def main() -> None:
                                    feat_dir / f"{slug}_linear_regression_diagnostics.png")
 
     summary = pd.DataFrame(summary_rows)
-    summary.to_csv(OUTPUT_DIR / "clinical_only_linear_regression_summary.csv", index=False)
-    print(f"Saved summary to {OUTPUT_DIR / 'clinical_only_linear_regression_summary.csv'}")
+    summary.to_csv(output_dir / "clinical_only_linear_regression_summary.csv", index=False)
+    print(f"Saved summary to {output_dir / 'clinical_only_linear_regression_summary.csv'}")
 
-    plot_metrics_summary(summary, OUTPUT_DIR / "clinical_only_linear_regression_metrics_summary.png")
+    plot_metrics_summary(summary, output_dir / "clinical_only_linear_regression_metrics_summary.png")
 
     corr_rows = (feature_clinic4_correlations(x_int_all, meta_int, input_cols, "internal")
                  + feature_clinic4_correlations(x_ext_all, meta_ext, input_cols, "external"))
-    write_correlation_rows(corr_rows, "clinic4")
+    write_correlation_rows(corr_rows, "clinic4", correlation_csv)
     corr_df = pd.DataFrame(corr_rows)
-    plot_feature_clinic4_corr_heatmap(corr_df, input_cols, OUTPUT_DIR / "clinical_only_feature_clinic4_correlation_heatmap.png")
+    plot_feature_clinic4_corr_heatmap(corr_df, input_cols, output_dir / "clinical_only_feature_clinic4_correlation_heatmap.png")
 
-    write_sheets(OUTPUT_DIR / "gangnam_io.xlsx", {"clinic4": io_int_df})
-    write_sheets(OUTPUT_DIR / "sinchon_io.xlsx", {"clinic4": io_ext_df})
+    write_sheets(output_dir / "gangnam_io.xlsx", {"clinic4": io_int_df})
+    write_sheets(output_dir / "sinchon_io.xlsx", {"clinic4": io_ext_df})
+
+
+# internal 코호트를 로드/전처리 후 전체(sex 포함)/남성만/여성만 3가지로 나눠 run()을 각각 실행
+def main() -> None:
+    meta_int, meta_ext = load_cohort(INTERNAL_XLSX), load_cohort(EXTERNAL_XLSX)
+
+    clinical_cols = ["PatientAge", "Height", "Weight"]
+
+    def valid_clinical_rows(meta: pd.DataFrame) -> np.ndarray:
+        vals = meta[clinical_cols].apply(pd.to_numeric, errors="coerce")
+        mask = vals.notna().all(axis=1).to_numpy()
+        valid_sex = meta["PatientSex"].astype(str).str.upper().isin(["M", "F"]).to_numpy()
+        return mask & valid_sex
+
+    mask_clinical_int = valid_clinical_rows(meta_int)
+    mask_clinical_ext = valid_clinical_rows(meta_ext)
+    print(f"Clinical input 결측 제외: internal {(~mask_clinical_int).sum()}/{len(mask_clinical_int)}, "
+          f"external {(~mask_clinical_ext).sum()}/{len(mask_clinical_ext)}")
+    meta_int = meta_int[mask_clinical_int].reset_index(drop=True)
+    meta_ext = meta_ext[mask_clinical_ext].reset_index(drop=True)
+
+    sex_int = meta_int["PatientSex"].astype(str).str.upper()
+    sex_ext = meta_ext["PatientSex"].astype(str).str.upper()
+
+    run(meta_int, meta_ext, OUTPUT_DIR / "total", include_sex=True)
+    for sex_label, sub_dir in (("M", OUTPUT_DIR / "male"), ("F", OUTPUT_DIR / "female")):
+        print(f"\n=== sex={sex_label} ({sub_dir.name}) ===")
+        run(meta_int[sex_int == sex_label].reset_index(drop=True),
+            meta_ext[sex_ext == sex_label].reset_index(drop=True), sub_dir, include_sex=False)
 
 
 if __name__ == "__main__":
