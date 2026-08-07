@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 # 임상변수 4개(sex/age/height/weight) + AEC-128 곡선의 통계적 형태 feature(SD, Skewness, 슬라이스
-# 위치 기준 상위/하위 50% 평균 비율)를 개별/결합 추가 input으로 써서 체성분 feature(연속형)를
-# 예측하는 선형회귀 성능을 clinic4 baseline과 비교한다(Step 2: + SD, Skewness, Upper/Lower 50% 비율 등).
+# 위치 기준 상위/하위 50% 평균 비율, FPCA top-3 score)를 개별/결합 추가 input으로 써서 체성분
+# feature(연속형)를 예측하는 선형회귀 성능을 clinic4 baseline과 비교한다.
 
 from pathlib import Path
 from typing import cast
@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import KFold, cross_val_predict
@@ -28,6 +29,7 @@ N_FOLDS = 5
 SEED = 20260709
 N_SLICES = 128
 AEC_COLS = [f"aec_{i}" for i in range(1, N_SLICES + 1)]
+N_FPCA_COMPONENTS = 3
 
 # 예측 대상 연속형 체성분 feature -> 파일명에 쓸 영문 slug
 FEATURES = {
@@ -65,6 +67,14 @@ def shape_features(aec_matrix: np.ndarray) -> dict[str, np.ndarray]:
     upper_lower_ratio = upper_mean / lower_mean
 
     return {"sd": sd, "skew": skewness, "upper_lower_ratio": upper_lower_ratio}
+
+
+# internal 코호트 raw AEC-128 곡선에 PCA를 fit해 top-n_components score를 산출(등간격 128포인트이므로
+# 표준 PCA가 FPCA의 이산 근사가 됨), external에는 동일 변환을 frozen 적용
+def fpca_scores(aec_int: np.ndarray, aec_ext: np.ndarray,
+                 n_components: int = N_FPCA_COMPONENTS) -> tuple[np.ndarray, np.ndarray, PCA]:
+    pca = PCA(n_components=n_components, random_state=SEED).fit(aec_int)
+    return pca.transform(aec_int), pca.transform(aec_ext), pca
 
 
 # age/height/weight 행렬 구성 + 표준화 + (include_sex시) sex 열 + (있으면) AEC 형태 feature 결합. scaler 생략 시 새로 학습(내부 코호트용).
@@ -113,6 +123,7 @@ def plot_r2_comparison(summary: pd.DataFrame, model_order: list[str], out_path: 
         "clinic4_aec_sd": "#2a78d6",
         "clinic4_aec_skew": "#e2622e",
         "clinic4_aec_uplow_ratio": "#4caf50",
+        "clinic4_aec_fpca": "#16a085",
         "clinic4_aec_shape_all": "#9b59b6",
     }
     labels = {
@@ -120,6 +131,7 @@ def plot_r2_comparison(summary: pd.DataFrame, model_order: list[str], out_path: 
         "clinic4_aec_sd": "+AEC SD",
         "clinic4_aec_skew": "+AEC Skewness",
         "clinic4_aec_uplow_ratio": "+AEC 상/하위50% 비율",
+        "clinic4_aec_fpca": f"+AEC FPCA(PC1-{N_FPCA_COMPONENTS})",
         "clinic4_aec_shape_all": "+AEC 형태 전체",
     }
 
@@ -154,14 +166,18 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
     aec_int_raw = meta_int[AEC_COLS].astype(float).to_numpy()
     aec_ext_raw = meta_ext[AEC_COLS].astype(float).to_numpy()
     shape_int, shape_ext = shape_features(aec_int_raw), shape_features(aec_ext_raw)
+    fpca_int, fpca_ext, pca = fpca_scores(aec_int_raw, aec_ext_raw)
+    print(f"[FPCA] explained variance ratio (PC1-{N_FPCA_COMPONENTS}): {pca.explained_variance_ratio_.round(4)}")
 
-    model_order = ["clinic4", "clinic4_aec_sd", "clinic4_aec_skew", "clinic4_aec_uplow_ratio", "clinic4_aec_shape_all"]
+    model_order = ["clinic4", "clinic4_aec_sd", "clinic4_aec_skew", "clinic4_aec_uplow_ratio",
+                    "clinic4_aec_fpca", "clinic4_aec_shape_all"]
     models = {
         "clinic4": {"aec_int": None, "aec_ext": None},
         "clinic4_aec_sd": {"aec_int": shape_int["sd"].reshape(-1, 1), "aec_ext": shape_ext["sd"].reshape(-1, 1)},
         "clinic4_aec_skew": {"aec_int": shape_int["skew"].reshape(-1, 1), "aec_ext": shape_ext["skew"].reshape(-1, 1)},
         "clinic4_aec_uplow_ratio": {"aec_int": shape_int["upper_lower_ratio"].reshape(-1, 1),
                                      "aec_ext": shape_ext["upper_lower_ratio"].reshape(-1, 1)},
+        "clinic4_aec_fpca": {"aec_int": fpca_int, "aec_ext": fpca_ext},
         "clinic4_aec_shape_all": {
             "aec_int": np.column_stack([shape_int["sd"], shape_int["skew"], shape_int["upper_lower_ratio"]]),
             "aec_ext": np.column_stack([shape_ext["sd"], shape_ext["skew"], shape_ext["upper_lower_ratio"]]),
