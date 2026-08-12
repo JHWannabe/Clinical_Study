@@ -1,0 +1,157 @@
+feature,model,cohort,scanner,n,n_pos,auc
+SAT(피하지방)_SUM,clinic4,internal,Ingenuity Core 128,111,6,0.8809523809523809
+SAT(피하지방)_SUM,clinic4,internal,Revolution CT,69,14,0.8389610389610389
+SAT(피하지방)_SUM,clinic4,internal,SOMATOM Definition AS+,85,12,0.6815068493150684
+SAT(피하지방)_SUM,clinic4,internal,Sensation 64,122,12,0.6613636363636364
+SAT(피하지방)_SUM,clinic4,external,Revolution EVO,61,14,0.817629179331307
+SAT(피하지방)_SUM,clinic4,external,SOMATOM Definition AS+,85,8,0.987012987012987
+SAT(피하지방)_SUM,clinic4,external,SOMATOM Definition Flash,115,14,0.8741159830268741
+SAT(피하지방)_SUM,clinic4,external,SOMATOM Force,58,8,0.905
+SAT(피하지방)_SUM,clinic4_aec_best,internal,Ingenuity Core 128,111,6,0.9111111111111111
+SAT(피하지방)_SUM,clinic4_aec_best,internal,Revolution CT,69,14,0.7805194805194806
+SAT(피하지방)_SUM,clinic4_aec_best,internal,SOMATOM Definition AS+,85,12,0.6643835616438356
+SAT(피하지방)_SUM,clinic4_aec_best,internal,Sensation 64,122,12,0.6878787878787879
+SAT(피하지방)_SUM,clinic4_aec_best,external,Revolution EVO,61,14,0.9285714285714286
+SAT(피하지방)_SUM,clinic4_aec_best,external,SOMATOM Definition AS+,85,8,0.8457792207792207
+SAT(피하지방)_SUM,clinic4_aec_best,external,SOMATOM Definition Flash,115,14,0.8528995756718529
+SAT(피하지방)_SUM,clinic4_aec_best,external,SOMATOM Force,58,8,0.6950000000000001
+VAT(내장지방)_SUM,clinic4,internal,Ingenuity Core 128,111,11,0.9254545454545454
+VAT(내장지방)_SUM,clinic4,internal,Revolution CT,69,11,0.7946708463949843
+VAT(내장지방)_SUM,clinic4,internal,SOMATOM Definition AS+,85,14,0.800804828973843
+VAT(내장지방)_SUM,clinic4,internal,Sensation 64,122,17,0.6991596638655463
+VAT(내장지방)_SUM,clinic4,external,Revolution EVO,61,15,0.7376811594202899
+VAT(내장지방)_SUM,clinic4,external,iCT 256,52,6,0.6630434782608695
+VAT(내장지방)_SUM,clinic4,external,SOMATOM Definition AS+,85,11,0.9312039312039312
+VAT(내장지방)_SUM,clinic4,external,SOMATOM Definition Flash,115,17,0.8649459783913566
+VAT(내장지방)_SUM,clinic4,external,SOMATOM Force,58,9,0.8979591836734693
+VAT(내장지방)_SUM,clinic4_aec_best,internal,Ingenuity Core 128,111,11,0.9654545454545455
+VAT(내장지방)_SUM,clinic4_aec_best,internal,Revolution CT,69,11,0.9231974921630093
+VAT(내장지방)_SUM,clinic4_aec_best,internal,SOMATOM Definition AS+,85,14,0.8048289738430583
+VAT(내장지방)_SUM,clinic4_aec_best,internal,Sensation 64,122,17,0.8380952380952381
+VAT(내장지방)_SUM,clinic4_aec_best,external,Revolution EVO,61,15,0.8014492753623189
+VAT(내장지방)_SUM,clinic4_aec_best,external,iCT 256,52,6,0.7246376811594203
+VAT(내장지방)_SUM,clinic4_aec_best,external,SOMATOM Definition AS+,85,11,0.8599508599508598
+VAT(내장지방)_SUM,clinic4_aec_best,external,SOMATOM Definition Flash,115,17,0.8697478991596639
+VAT(내장지방)_SUM,clinic4_aec_best,external,SOMATOM Force,58,9,0.9387755102040816
+Total Fat_SUM,clinic4,internal,Ingenuity Core 128,111,7,0.9656593406593407
+Total Fat_SUM,clinic4,internal,Revolution CT,69,10,0.8864406779661016
+Total Fat_SUM,clinic4,internal,SOMATOM Definition AS+,85,14,0.7052313883299799
+Total Fat_SUM,clinic4,internal,Sensation 64,122,13,0.662667607621736
+Total Fat_SUM,clinic4,external,Revolution EVO,61,16,0.7986111111111112
+Total Fat_SUM,clinic4,external,iCT 256,52,2,0.79
+Total Fat_SUM,clinic4,external,SOMATOM Definition AS+,85,9,0.9576023391812866
+Total Fat_SUM,clinic4,external,SOMATOM Definition Flash,115,14,0.9469589816124471
+Total Fat_SUM,clinic4,external,SOMATOM Force,58,9,0.979591836734694
+Total Fat_SUM,clinic4_aec_best,internal,Ingenuity Core 128,111,7,0.9835164835164836
+Total Fat_SUM,clinic4_aec_best,internal,Revolution CT,69,10,0.8847457627118644
+Total Fat_SUM,clinic4_aec_best,internal,SOMATOM Definition AS+,85,14,0.7334004024144869
+Total Fat_SUM,clinic4_aec_best,internal,Sensation 64,122,13,0.7904022582921666
+Total Fat_SUM,clinic4_aec_best,external,Revolution EVO,61,16,0.8958333333333334
+Total Fat_SUM,clinic4_aec_best,external,iCT 256,52,2,0.91
+Total Fat_SUM,clinic4_aec_best,external,SOMATOM Definition AS+,85,9,0.6666666666666666
+Total Fat_SUM,clinic4_aec_best,external,SOMATOM Definition Flash,115,14,0.8026874115983028
+Total Fat_SUM,clinic4_aec_best,external,SOMATOM Force,58,9,0.9863945578231292
+VAT_TotalFat_ratio,clinic4,internal,Ingenuity Core 128,111,14,0.658321060382916
+VAT_TotalFat_ratio,clinic4,internal,Revolution CT,69,10,0.6423728813559322
+VAT_TotalFat_ratio,clinic4,internal,SOMATOM Definition AS+,85,8,0.6071428571428572
+VAT_TotalFat_ratio,clinic4,internal,Sensation 64,122,28,0.6136018237082067
+VAT_TotalFat_ratio,clinic4,external,Revolution EVO,61,13,0.6762820512820513
+VAT_TotalFat_ratio,clinic4,external,iCT 256,52,7,0.6984126984126984
+VAT_TotalFat_ratio,clinic4,external,SOMATOM Definition AS+,85,17,0.6756055363321799
+VAT_TotalFat_ratio,clinic4,external,SOMATOM Definition Flash,115,15,0.732
+VAT_TotalFat_ratio,clinic4,external,SOMATOM Force,58,7,0.6106442577030813
+VAT_TotalFat_ratio,clinic4_aec_best,internal,Ingenuity Core 128,111,14,0.8188512518409427
+VAT_TotalFat_ratio,clinic4_aec_best,internal,Revolution CT,69,10,0.8186440677966101
+VAT_TotalFat_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,8,0.8717532467532467
+VAT_TotalFat_ratio,clinic4_aec_best,internal,Sensation 64,122,28,0.8100303951367781
+VAT_TotalFat_ratio,clinic4_aec_best,external,Revolution EVO,61,13,0.6939102564102564
+VAT_TotalFat_ratio,clinic4_aec_best,external,iCT 256,52,7,0.5587301587301587
+VAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,17,0.7569204152249136
+VAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,15,0.6846666666666666
+VAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Force,58,7,0.773109243697479
+VAT_SAT_ratio,clinic4,internal,Ingenuity Core 128,111,14,0.658321060382916
+VAT_SAT_ratio,clinic4,internal,Revolution CT,69,10,0.6423728813559322
+VAT_SAT_ratio,clinic4,internal,SOMATOM Definition AS+,85,8,0.6071428571428572
+VAT_SAT_ratio,clinic4,internal,Sensation 64,122,28,0.6136018237082067
+VAT_SAT_ratio,clinic4,external,Revolution EVO,61,12,0.6666666666666667
+VAT_SAT_ratio,clinic4,external,iCT 256,52,6,0.7028985507246377
+VAT_SAT_ratio,clinic4,external,SOMATOM Definition AS+,85,16,0.6666666666666667
+VAT_SAT_ratio,clinic4,external,SOMATOM Definition Flash,115,15,0.732
+VAT_SAT_ratio,clinic4,external,SOMATOM Force,58,5,0.7132075471698114
+VAT_SAT_ratio,clinic4_aec_best,internal,Ingenuity Core 128,111,14,0.8188512518409427
+VAT_SAT_ratio,clinic4_aec_best,internal,Revolution CT,69,10,0.8186440677966101
+VAT_SAT_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,8,0.8717532467532467
+VAT_SAT_ratio,clinic4_aec_best,internal,Sensation 64,122,28,0.8100303951367781
+VAT_SAT_ratio,clinic4_aec_best,external,Revolution EVO,61,12,0.7023809523809523
+VAT_SAT_ratio,clinic4_aec_best,external,iCT 256,52,6,0.5688405797101449
+VAT_SAT_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,16,0.7382246376811594
+VAT_SAT_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,15,0.6846666666666666
+VAT_SAT_ratio,clinic4_aec_best,external,SOMATOM Force,58,5,0.8301886792452831
+VAT_TAMA_ratio,clinic4,internal,Ingenuity Core 128,111,11,0.6572727272727272
+VAT_TAMA_ratio,clinic4,internal,Revolution CT,69,9,0.6574074074074074
+VAT_TAMA_ratio,clinic4,internal,SOMATOM Definition AS+,85,8,0.6834415584415585
+VAT_TAMA_ratio,clinic4,internal,Sensation 64,122,17,0.7994397759103642
+VAT_TAMA_ratio,clinic4,external,Revolution EVO,61,12,0.6547619047619048
+VAT_TAMA_ratio,clinic4,external,iCT 256,52,7,0.6793650793650794
+VAT_TAMA_ratio,clinic4,external,SOMATOM Definition AS+,85,13,0.8846153846153846
+VAT_TAMA_ratio,clinic4,external,SOMATOM Definition Flash,115,17,0.7352941176470588
+VAT_TAMA_ratio,clinic4,external,SOMATOM Force,58,10,0.91875
+VAT_TAMA_ratio,clinic4_aec_best,internal,Ingenuity Core 128,111,11,0.8863636363636364
+VAT_TAMA_ratio,clinic4_aec_best,internal,Revolution CT,69,9,0.8
+VAT_TAMA_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,8,0.7775974025974026
+VAT_TAMA_ratio,clinic4_aec_best,internal,Sensation 64,122,17,0.9008403361344538
+VAT_TAMA_ratio,clinic4_aec_best,external,Revolution EVO,61,12,0.8367346938775511
+VAT_TAMA_ratio,clinic4_aec_best,external,iCT 256,52,7,0.7619047619047619
+VAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,13,0.7435897435897436
+VAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,17,0.7490996398559424
+VAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Force,58,10,0.9229166666666666
+TotalFat_TAMA_ratio,clinic4,internal,Ingenuity Core 128,111,2,0.8623853211009174
+TotalFat_TAMA_ratio,clinic4,internal,Revolution CT,69,3,0.9343434343434344
+TotalFat_TAMA_ratio,clinic4,internal,SOMATOM Definition AS+,85,6,0.6118143459915611
+TotalFat_TAMA_ratio,clinic4,internal,Sensation 64,122,6,0.8189655172413794
+TotalFat_TAMA_ratio,clinic4,external,Revolution EVO,61,7,0.4656084656084656
+TotalFat_TAMA_ratio,clinic4,external,iCT 256,52,1,0.6666666666666667
+TotalFat_TAMA_ratio,clinic4,external,SOMATOM Definition AS+,85,6,0.9092827004219409
+TotalFat_TAMA_ratio,clinic4,external,SOMATOM Definition Flash,115,4,0.8581081081081081
+TotalFat_TAMA_ratio,clinic4,external,SOMATOM Force,58,5,0.9660377358490566
+TotalFat_TAMA_ratio,clinic4_aec_best,internal,Ingenuity Core 128,111,2,0.9036697247706422
+TotalFat_TAMA_ratio,clinic4_aec_best,internal,Revolution CT,69,3,0.8131313131313131
+TotalFat_TAMA_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,6,0.5759493670886076
+TotalFat_TAMA_ratio,clinic4_aec_best,internal,Sensation 64,122,6,0.8663793103448276
+TotalFat_TAMA_ratio,clinic4_aec_best,external,Revolution EVO,61,7,0.6402116402116402
+TotalFat_TAMA_ratio,clinic4_aec_best,external,iCT 256,52,1,0.7450980392156863
+TotalFat_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,6,0.9324894514767932
+TotalFat_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,4,0.7027027027027027
+TotalFat_TAMA_ratio,clinic4_aec_best,external,SOMATOM Force,58,5,0.8150943396226416
+SAT_TotalFat_ratio,clinic4,internal,Ingenuity Core 128,111,14,0.7606774668630338
+SAT_TotalFat_ratio,clinic4,internal,Revolution CT,69,11,0.835423197492163
+SAT_TotalFat_ratio,clinic4,internal,SOMATOM Definition AS+,85,18,0.6774461028192372
+SAT_TotalFat_ratio,clinic4,internal,Sensation 64,122,21,0.6704384724186705
+SAT_TotalFat_ratio,clinic4,external,Revolution EVO,61,4,0.5131578947368421
+SAT_TotalFat_ratio,clinic4,external,iCT 256,52,6,0.7898550724637681
+SAT_TotalFat_ratio,clinic4,external,SOMATOM Definition AS+,85,18,0.7396351575456053
+SAT_TotalFat_ratio,clinic4,external,SOMATOM Definition Flash,115,18,0.6758304696449027
+SAT_TotalFat_ratio,clinic4,external,SOMATOM Force,58,12,0.8115942028985508
+SAT_TotalFat_ratio,clinic4_aec_best,internal,Ingenuity Core 128,111,14,0.849779086892489
+SAT_TotalFat_ratio,clinic4_aec_best,internal,Revolution CT,69,11,0.8934169278996865
+SAT_TotalFat_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,18,0.7711442786069652
+SAT_TotalFat_ratio,clinic4_aec_best,internal,Sensation 64,122,21,0.7388024516737387
+SAT_TotalFat_ratio,clinic4_aec_best,external,Revolution EVO,61,4,0.6578947368421052
+SAT_TotalFat_ratio,clinic4_aec_best,external,iCT 256,52,6,0.6594202898550725
+SAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,18,0.8051409618573796
+SAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,18,0.7164948453608248
+SAT_TotalFat_ratio,clinic4_aec_best,external,SOMATOM Force,58,12,0.806159420289855
+SAT_TAMA_ratio,clinic4,internal,Revolution CT,69,2,0.4925373134328358
+SAT_TAMA_ratio,clinic4,internal,SOMATOM Definition AS+,85,4,0.345679012345679
+SAT_TAMA_ratio,clinic4,internal,Sensation 64,122,2,0.47500000000000003
+SAT_TAMA_ratio,clinic4,external,Revolution EVO,61,3,0.5517241379310345
+SAT_TAMA_ratio,clinic4,external,SOMATOM Definition AS+,85,4,0.8888888888888888
+SAT_TAMA_ratio,clinic4,external,SOMATOM Definition Flash,115,2,0.8584070796460177
+SAT_TAMA_ratio,clinic4,external,SOMATOM Force,58,4,0.6527777777777778
+SAT_TAMA_ratio,clinic4_aec_best,internal,Revolution CT,69,2,0.9328358208955224
+SAT_TAMA_ratio,clinic4_aec_best,internal,SOMATOM Definition AS+,85,4,0.3981481481481482
+SAT_TAMA_ratio,clinic4_aec_best,internal,Sensation 64,122,2,0.5541666666666667
+SAT_TAMA_ratio,clinic4_aec_best,external,Revolution EVO,61,3,0.6666666666666666
+SAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition AS+,85,4,0.7530864197530864
+SAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Definition Flash,115,2,0.34955752212389385
+SAT_TAMA_ratio,clinic4_aec_best,external,SOMATOM Force,58,4,0.18981481481481483

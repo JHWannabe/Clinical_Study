@@ -1,122 +1,111 @@
-# Step1~3(AEC 추가 실험) 확증적 통계 검정 — paired bootstrap 재분석
+# Step3(Logistic Regression + AEC) 확증적 통계 검정 — DeLong paired AUC test
 
-> **주의(2026-08-04, [[project_outputs_step_folder_reorg]])**: 이 문서 작성 당시의
-> Step2/Step3 번호는 `code/`의 **구 매핑**(step2=shape, step3=back_half+segment_select)
-> 기준이다. 260804 재편으로 `outputs/`가 `code/`의 step0~3와 1:1 대응하도록 폴더가
-> 바뀌면서 **번호가 반대로 뒤집혔다**(현재는 step2=back_half+segment_select,
-> step3=shape). 아래 본문의 "Step2"·"Step3" 표기와 스크립트 파일명은 **현재 코드
-> 기준으로 갱신**했으나, 이 분석의 원자료였던 `outputs/step3_topk_backhalf_rigorous_significance.csv`는
-> 재편 과정에서 **삭제되어 현재 리포지토리에 존재하지 않는다**(git status 기준,
-> `outputs/step1/step_ci_significance_analysis.csv`만 유효하게 남아 있음). 즉 아래
-> Step2·Step3 표는 삭제 전 마지막 계산 결과를 기록으로만 보존한 것이며, 재검증이
-> 필요하면 스크립트를 다시 실행해 원자료를 재생성해야 한다.
+> **개정 이력**: 이 문서는 과거 `step1_2_3_rigorous_significance_analysis.md`(구
+> `step1_clinic_aec_mean.py`/`step2_clinic_aec_segment_select.py`/
+> `step2_clinic_aec_back_half.py`/`step3_clinic_aec_shape.py` 기반 paired bootstrap
+> ΔR² 분석)를 대체한다. 해당 4개 스크립트는 [[project_260810_step_renumbering]] →
+> [[project_260813_step_renumbering_v2]] 재편 과정에서 모두 삭제/재구성되어 현재
+> 리포지토리에 존재하지 않으며, 원자료(`outputs/step3_topk_backhalf_rigorous_significance.csv`)도
+> 함께 삭제되었다. 아래는 현재(2026-08-13 기준) `code/` 파이프라인의 확증적 검정으로
+> 새로 작성한 내용이다.
 
-`docs/clinic4_aec_mean_segment_analysis.md`가 Step1 구간수 sweep(`step1_clinic_aec_mean.py`)에
-적용한 프로토콜(**internal 5-fold OOF로 feature별 최적 config를 먼저 확정 → 그 config
-하나만 external에 paired bootstrap(5,000회, clinic4 vs AEC모델을 동일 리샘플 인덱스로
-동시 재표집한 ΔR²) 단일 검증**, [[internal_external_validation_protocol]])를 Step1
-(`step1_clinic_aec_mean.py`의 N=1)·Step2 top-k(`step2_clinic_aec_segment_select.py`)·
-Step2 앞/뒤50%(`step2_clinic_aec_back_half.py`)·Step3(`step3_clinic_aec_shape.py`) 나머지
-3개 실험에도 동일하게 적용해 재검증했다.
+## 배경
 
-기존 slide 7~15의 다수 불릿(예: "VAT top8 external +0.09")은 k=1~8 또는 segment=1~128을
-전부 external과 대조해 그중 눈에 띄는 값을 골라 인용한 것이라 **다중비교(multiple
-comparison) 낙관편향** 위험이 있었다([[feedback_internal_external_validation_discipline]]).
-아래는 그 문제를 제거한 단일 확증 검정 결과다.
+현재 `code/` 최상위 파이프라인은 다음과 같이 재편되어 있다([[project_260813_step_renumbering_v2]]):
+
+- `step0_output_feature_correlation.py` — output feature × clinic4/AEC 상관
+- `step1_aec_fpca.py` — AEC-128 FPCA 컴포넌트 수 탐색
+- `step2_clinic_aec_ratio.py` — clinic4+AEC 5개 형태후보 vs 절대값·비율 R²(선형회귀)
+- **`step3_clinic_aec_logistic.py` — clinic4 vs clinic4+AEC 로지스틱 회귀 + DeLong paired AUC test + ΔAUC 요약표(구 `step4_auc_delta_table.py`, 2026-08-11 통합) (본 문서의 대상)**
+- `step4_aec_diagnostics.py` — 스캐너별 서브그룹 R²(+ 위 AUC를 묶은 스캐너 요약표)
+- `step6_aec_deep_learning.py`
+
+이 중 `step3_clinic_aec_logistic.py`가 clinic4 baseline과 clinic4+AEC 모델 간
+AUC 차이를 **같은 환자 집합에 대한 paired DeLong test**로 직접 검정하므로, 과거
+paired bootstrap ΔR² 분석과 동일한 역할(확증적 단일검정)을 이 파이프라인에서는
+이 스크립트가 담당한다.
 
 ## 방법
 
-1. Feature별로 internal(gangnam) 5-fold OOF R²가 가장 높은 config(=1개)를 확정.
-2. 그 config 하나만 external(sinchon)에 동결 적용, clinic4 baseline과 **동일 환자
-   리샘플 인덱스**로 5,000회 paired bootstrap → ΔR²의 95% CI 산출.
-3. CI가 0을 포함하지 않으면 "유의", 포함하면 "n.s."로 판정.
-4. 재현 스크립트: `code/step1_clinic_aec_mean.py`(Step1: N=1 고정)·`code/step3_clinic_aec_shape.py`(Step3)·
-   `code/step2_clinic_aec_segment_select.py`(Step2 top-k)·`code/step2_clinic_aec_back_half.py`(Step2 앞/뒤50%)의
-   모델 fitting 로직을 그대로 재현 후 paired bootstrap만 추가. 원자료(현재 삭제됨):
-   `outputs/step3_topk_backhalf_rigorous_significance.csv`.
+1. AEC 형태 후보 5종(SD, Skewness, 상하위50%비율, FPCA(n=3), 위 4종 전체결합) 중
+   체성분 feature 9종(SAT/VAT/Total Fat SUM 절대값 3종 + 비율 6종) 평균 **internal
+   5-fold OOF R²**(선형회귀)가 가장 높은 조합 1개를 `clinic4_aec_best`로 확정.
+   **external은 이 단계에서 전혀 사용하지 않는다**([[feedback_internal_external_validation_discipline]]
+   준수 — `code/step3_clinic_aec_logistic.py:128-165`).
+2. `clinic4`(baseline) vs `clinic4_aec_best` 2개 모델로 9개 feature 각각에 대해
+   로지스틱 회귀 학습. Cutoff은 internal 성별 mean±1SD([[project_step4_tama_1sd_cutoff_switch]]).
+3. Internal은 5-fold OOF, external은 동결(freeze) 모델을 1회만 적용.
+4. AUC 차이는 **DeLong paired test**로 검정(같은 환자에 대한 두 모델 점수 비교이므로
+   독립 two-sample이 아닌 paired test 사용, `delong_paired_auc_test()`).
+5. 추가로 9개 feature(=9회 동시검정)에 대해 **Benjamini-Hochberg FDR 보정**(α=0.05)을
+   internal/external 각각에 적용해 다중비교를 통제했다(본 문서 작성 시 사후 계산 추가).
+6. 재현 스크립트: `code/step3_clinic_aec_logistic.py`. 원자료: `outputs/step3/total/delong_auc_comparison.csv`,
+   `outputs/step3/total/logistic_regression_summary.csv`(total cohort). 성별 분리 결과는
+   `outputs/step3/{male,female}/`에 별도 존재.
 
-## 결과
+> **주의**: 어떤 AEC 형태 후보(`aec_sd`/`aec_skew`/`aec_uplow_ratio`/`aec_fpca`/`aec_shape_all`)가
+> `clinic4_aec_best`로 선택되었는지는 CSV로 저장되지 않고 콘솔 로그(`[Step2 조합 선택] 선택된
+> 조합 = ...`)에만 출력된다([[project_260813_step_renumbering_v2]]). 본 문서는 기존에 저장된
+> `outputs/step3/total/` 산출물만 사용했으므로 이번 선택 조합명은 재확인이 필요하다.
 
-### Step1 — AEC-128 전체 평균 1개 값(N=1)
+## 결과 — clinic4 vs clinic4_aec_best, 9개 feature × internal/external
 
-| feature | internal R² (Δ) | external R² (Δ) | 95% CI (Δ) | 판정 |
-|---|---|---|---|---|
-| IMATA | 0.355 (+0.022) | 0.191 (-0.091) | [-0.118, -0.067] | **유의(악화)** |
-| NAMA | 0.610 (+0.019) | 0.375 (-0.193) | [-0.226, -0.164] | **유의(악화)** |
-| LAMA | 0.425 (+0.006) | -0.182 (-0.147) | [-0.168, -0.128] | **유의(악화)** |
-| TAMA | 0.650 (+0.004) | 0.677 (-0.034) | [-0.045, -0.025] | **유의(악화)** |
-| SAT | 0.541 (+0.013) | 0.536 (-0.029) | [-0.045, -0.013] | **유의(악화)** |
-| VAT | 0.530 (+0.007) | 0.378 (-0.041) | [-0.059, -0.022] | **유의(악화)** |
-| Total Fat | 0.518 (+0.016) | 0.447 (-0.045) | [-0.066, -0.025] | **유의(악화)** |
+| feature | cohort | AUC clinic4 | AUC clinic4_aec_best | ΔAUC | z | raw p | BH-FDR(α=.05) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| VAT(내장지방)_SUM | internal | 0.847 | 0.894 | +0.047 | -4.462 | 8.14e-06 | 유의 |
+| VAT(내장지방)_SUM | external | 0.813 | 0.860 | +0.047 | -3.516 | 4.37e-04 | 유의 |
+| Total Fat_SUM | internal | 0.852 | 0.871 | +0.018 | -2.012 | 0.0442 | 유의(경계) |
+| Total Fat_SUM | external | 0.867 | 0.889 | +0.022 | -2.641 | 0.00828 | 유의 |
+| SAT(피하지방)_SUM | internal | 0.841 | 0.850 | +0.009 | -0.903 | 0.367 | n.s. |
+| SAT(피하지방)_SUM | external | 0.873 | 0.886 | +0.013 | -1.655 | 0.0978 | n.s. |
+| VAT_TotalFat_ratio | internal | 0.757 | 0.830 | +0.074 | -5.179 | 2.23e-07 | 유의 |
+| VAT_TotalFat_ratio | external | 0.708 | 0.787 | +0.079 | -4.701 | 2.59e-06 | 유의 |
+| VAT_SAT_ratio | internal | 0.763 | 0.844 | +0.081 | -5.422 | 5.90e-08 | 유의 |
+| VAT_SAT_ratio | external | 0.710 | 0.784 | +0.074 | -4.065 | 4.80e-05 | 유의 |
+| VAT_TAMA_ratio | internal | 0.842 | 0.890 | +0.048 | -4.575 | 4.77e-06 | 유의 |
+| VAT_TAMA_ratio | external | 0.803 | 0.849 | +0.046 | -3.084 | 0.00204 | 유의 |
+| TotalFat_TAMA_ratio | internal | 0.821 | 0.848 | +0.027 | -2.314 | 0.0207 | 유의 |
+| TotalFat_TAMA_ratio | external | 0.819 | 0.856 | +0.037 | -3.100 | 0.00193 | 유의 |
+| SAT_TotalFat_ratio | internal | 0.775 | 0.811 | +0.037 | -3.059 | 0.00222 | 유의 |
+| SAT_TotalFat_ratio | external | 0.759 | 0.796 | +0.037 | -2.520 | 0.0117 | 유의 |
+| SAT_TAMA_ratio | internal | 0.819 | 0.845 | +0.027 | -2.163 | 0.0305 | n.s.(FDR 탈락) |
+| SAT_TAMA_ratio | external | 0.818 | 0.839 | +0.020 | -1.949 | 0.0513 | n.s. |
 
-**7개 feature 전부 external에서 통계적으로 유의하게 악화** — 예외 없음. 정보를 1개
-숫자로 극단적으로 압축하면 어떤 체성분 feature에도 도움이 안 된다.
-
-### Step3 — 곡선 형태 feature(SD·Skewness·상하위50%비율), feature별 internal-best 확정 후 단일검증
-
-| feature | internal-best | external R² (Δ) | 95% CI (Δ) | 판정 |
-|---|---|---|---|---|
-| VAT | shape_all | 0.485 (+0.067) | [0.040, 0.098] | **유의(개선)** |
-| Total Fat | shape_all | 0.520 (+0.028) | [0.008, 0.049] | **유의(개선)** |
-| LAMA | uplow_ratio | 0.026 (+0.062) | [0.039, 0.086] | 유의(개선) — baseline≈0이라 실질적 의미 낮음 |
-| SAT | shape_all | 0.569 (+0.005) | [-0.005, 0.014] | n.s. |
-| IMATA | shape_all | 0.277 (-0.006) | [-0.026, 0.015] | n.s. |
-| NAMA | shape_all | 0.451 (-0.117) | [-0.141, -0.094] | **유의(악화)** |
-| TAMA | shape_all | 0.672 (-0.039) | [-0.050, -0.029] | **유의(악화)** |
-
-### Step2 top-k 구간선택, feature별 internal-best k 확정 후 단일검증
-
-| feature | internal-best k | external R² (Δ) | 95% CI (Δ) | 판정 |
-|---|---|---|---|---|
-| VAT | top8 | 0.509 (+0.090) | [0.058, 0.125] | **유의(개선)** |
-| Total Fat | top8 | 0.524 (+0.032) | [0.004, 0.062] | **유의(개선)** |
-| LAMA | top8 | 0.004 (+0.039) | [0.004, 0.076] | 유의(개선) — baseline≈0이라 실질적 의미 낮음 |
-| IMATA | top8 | 0.291 (+0.009) | [-0.026, 0.046] | n.s. |
-| SAT | top7 | 0.557 (-0.008) | [-0.029, 0.014] | n.s. |
-| NAMA | top3 | 0.436 (-0.132) | [-0.158, -0.109] | **유의(악화)** |
-| TAMA | top6 | 0.676 (-0.035) | [-0.046, -0.025] | **유의(악화)** |
-
-### Step2 앞/뒤 50% 단독 사용, feature별 internal-best(앞 또는 뒤) 확정 후 단일검증
-
-| feature | internal-best | external R² (Δ) | 95% CI (Δ) | 판정 |
-|---|---|---|---|---|
-| IMATA | back50 | 0.189 (-0.093) | [-0.126, -0.063] | **유의(악화)** |
-| NAMA | back50 | 0.387 (-0.181) | [-0.213, -0.152] | **유의(악화)** |
-| LAMA | back50 | -0.254 (-0.218) | [-0.252, -0.189] | **유의(악화)** |
-| TAMA | front50 | 0.672 (-0.039) | [-0.052, -0.029] | **유의(악화)** |
-| SAT | back50 | 0.544 (-0.021) | [-0.038, -0.004] | **유의(악화)** |
-| VAT | back50 | 0.356 (-0.063) | [-0.091, -0.034] | **유의(악화)** |
-| Total Fat | back50 | 0.446 (-0.046) | [-0.071, -0.021] | **유의(악화)** |
-
-**7개 feature 전부 유의하게 악화 — 지방계열도 예외 없음.** 곡선을 반으로 쪼개 한쪽
-절반만 단독으로 쓰는 방식은 정보 손실이 너무 커서 항상 해롭다(Step3 형태feature/Step2
-top-k처럼 여러 정보를 결합해야 이득이 나타남).
+(ΔAUC = clinic4_aec_best − clinic4, 양수=AEC 추가 시 개선. raw p는 DeLong test 양측검정.
+BH-FDR은 internal 9개·external 9개를 각각 독립적으로 보정.)
 
 ## 종합 해석
 
-4개 실험(Step1 단일평균, Step3 형태feature, Step2 top-k, Step2 앞/뒤50%)을 관통하는
-일관된 패턴:
-
-1. **NAMA·TAMA(근육계열)는 AEC를 어떤 방식으로 추가해도 예외 없이 유의하게 악화된다**
-   — 4개 실험 전부에서 확증. 근육 관련 AEC 상관이 원래 약하기 때문(NAMA 전 구간
-   |r|<0.25, `docs/output_feature_predictor_correlations` 참조).
-2. **VAT·Total Fat(지방계열)는 "정보를 충분히 담은" 표현(Step3 형태feature 결합,
-   Step2 top-k 8구간)에서만 유의하게 개선된다** — 반대로 정보를 과도하게 압축한
-   표현(Step1 단일평균, 앞/뒤50% 단독)에서는 VAT·Total Fat도 똑같이 유의하게
-   악화된다. 즉 "지방계열엔 AEC가 도움된다"는 무조건 참이 아니라, **곡선의 정보를
-   일정 수준 이상 보존해야만** 성립하는 조건부 결론이다.
-3. **IMATA·SAT는 어느 실험에서도 유의한 효과가 확인되지 않았다(n.s.)** — 기존
-   슬라이드가 이 둘을 "지방계열 전반 개선"에 묶어 서술한 것은 재검토가 필요하다.
-4. **LAMA의 "유의한 개선"은 `docs/clinic4_aec_mean_segment_analysis.md`와 동일한
-   이유로 액면 그대로 쓰지 말 것** — clinic4 baseline external R²가 -0.03~-0.25로
-   사실상 예측력이 없는 구간이라, 거기서 오르는 것은 통계적으로는 유의해도 실질적
-   예측력 획득으로 보기 어렵다.
+1. **9개 feature 중 7개(VAT, Total Fat, VAT_TotalFat_ratio, VAT_SAT_ratio,
+   VAT_TAMA_ratio, TotalFat_TAMA_ratio, SAT_TotalFat_ratio)는 internal·external
+   양쪽 모두, raw p와 BH-FDR 보정 후에도 유의하게 개선된다.** 특히 VAT 관련 비율
+   feature(VAT_SAT_ratio, VAT_TotalFat_ratio)의 ΔAUC가 +0.074~+0.081(internal)로
+   가장 크다.
+2. **SAT(피하지방) 단독 SUM은 internal(p=0.367)·external(p=0.098) 모두 n.s.** —
+   [[project_output_feature_predictor_correlations]]에서 이미 확인된 "SAT는 AEC와
+   상관이 약하다"는 결론과 일치한다.
+3. **SAT_TAMA_ratio는 raw p 기준 internal에서만 유의(p=0.0305)했으나 BH-FDR 보정
+   후 탈락**하고 external도 경계 수준(p=0.0513)이라 재현성이 약하다 — 액면 그대로
+   "유의"라고 쓰지 말 것.
+4. **이전 문서(구 step1, R² 기준)의 "7개 feature 전부 유의하게 악화"와 정반대
+   결론**이다. 방법이 세 가지 바뀌었기 때문이다: (a) 평가지표가 회귀 R²→분류
+   AUC로, (b) AEC 표현이 단일 평균값→5개 형태후보 중 internal-best 선택으로,
+   (c) feature가 절대값 3종 단독→절대값+비율 6종 추가로 확장되었다. 즉 "AEC가
+   도움이 되는가"는 이 세 조건에 따라 결론이 뒤집힐 수 있는 조건부 명제이며,
+   본 문서의 결과를 과거 R² 분석 결과와 직접 비교해 모순으로 해석하면 안 된다.
+5. 방법론적으로 본 검정은 [[feedback_internal_external_validation_discipline]]을
+   준수한다(AEC 후보 선택은 internal OOF만으로 확정, external은 동결 모델을 1회만
+   평가) — 과거 문서가 지적했던 다중비교 낙관편향 문제는 이 설계에서 재발하지 않는다.
+   다만 9개 feature를 동시에 검정하므로 feature 간 다중비교는 여전히 존재해 위
+   표에 BH-FDR 열을 추가했다.
 
 ## 참고
 
-- 선행 분석(Step1 구간수 sweep 전용): `docs/clinic4_aec_mean_segment_analysis.md`
+- 성별 분리 결과: `outputs/step3/male/`, `outputs/step3/female/`(본 문서는 total만 다룸)
+- 스캐너별 서브그룹 AUC: `outputs/step3/total/scanner_subgroup_auc.csv`, `code/step4_aec_diagnostics.py`
+- ΔAUC/DeLong p-value 요약표: `outputs/step3/auc_delta/`, `code/step3_clinic_aec_logistic.py`
+  (구 `step4_auc_delta_table.py`, 2026-08-11 통합)
+- 선형회귀 R² 비교(step2, 절대값/비율): `outputs/step2_ratio/total/`
+- pptx 반영: [[project_260813_results_multiple_features_pptx_edits]] slide 12-13(internal/external ΔAUC 표)
 - 방법론 원칙: `docs/internal_external_validation_protocol.md`,
   [[feedback_internal_external_validation_discipline]]
-- 원자료: `outputs/step3_topk_backhalf_rigorous_significance.csv`(Step2 top-k/앞뒤50%,
-  Step3 형태feature) — **삭제됨, 위 표는 기록 보존용**. Step1(N=1)은 이 문서의
-  표에만 기재(재현 스크립트는 위 "방법" 절 참고)
