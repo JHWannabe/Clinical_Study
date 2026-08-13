@@ -101,6 +101,28 @@ patient-wise 정규화의 재현 가능한 구현 예시는 Li 2022(귀하 파�
 **scaling·jittering·국소 magnitude warping만 선별 적용**하고 permutation은
 배제할 것.
 
+## F. FPCA를 의료 데이터 예측에 적용한 선례 (2026-08-13 추가)
+
+`step1_aec_fpca.py`(AEC-128 곡선 → FPCA score → clinic4 결합 회귀/로지스틱)와 구조가
+유사한 임상 응용 사례를 조사. Section D의 Ramsay & Silverman 2005(방법론 원전)에
+대응하는 **실제 임상 적용 사례**로, FPCA score를 사전정의 요약통계(mean/SD/percentile
+등)와 head-to-head 비교한 논문 위주로 선별했다.
+
+| 문헌 | 데이터 구조 | FPCA 성분/분산 | 예측 성능 |
+| --- | --- | --- | --- |
+| [Ahn Y et al. *Predefined and data driven CT densitometric features predict critical illness and hospital length of stay in COVID-19 patients.* Sci Rep. 2022;12:8916.](https://pmc.ncbi.nlm.nih.gov/articles/PMC9114017/) | n=80(중증 35/비중증 45), 전체 폐 CT 밀도 히스토그램(-1000~500 HU)을 Ramsay smoothing으로 곡선화 — **AEC-128과 가장 근접한 구조(CT 유래 1D 곡선 → FPCA → 임상 아웃컴)** | FPC1=76.7%, FPC2=13.5%, FPC3=3.8%, FPC4=2.6% | 단변량 AUC: F1(FPC1) 0.87 vs Q875 0.88 vs SD-CT 0.86(사전정의 요약통계와 대등); F1+NLR 결합 시 AUC 0.91. LOS 예측 bootstrap C-index 0.74, integrated Brier 0.16 |
+| [Wu S et al. *Supervised two-dimensional functional principal component analysis with time-to-event outcomes and mammogram imaging data.* Biometrics/PMC9160217. 2021.](https://pmc.ncbi.nlm.nih.gov/articles/PMC9160217/) | n=785(유방암 진단 246), 유방촬영상을 12×12 tensor-product B-spline basis로 2D 함수화 | Elbow plot으로 성분 수 선택(구체적 분산비율 미보고) | 5-year integrated AUC: benchmark 0.628 → FPCA 0.656 → FPLS 0.668 → supervised FPCA(sFPCA) 0.685 |
+| [Anderson AH et al. *Functional principal component based landmark analysis for the effects of longitudinal cholesterol profiles on the risk of coronary heart disease.* PMC9580044.](https://pmc.ncbi.nlm.nih.gov/articles/PMC9580044/) | n=1,669(관상동맥질환 사건 110건, 6.59%), 5년 간격 7회 방문 총콜레스테롤 종단측정 | FPC1=72.0%, FPC2=17.5%, FPC3=10.0%(누적 99%) | FPCA-landmark AUC 0.690 vs 마지막값이월(LVCF) AUC 0.588(약 30% 판별력 개선); 시뮬레이션 Brier score 약 10배 개선 |
+| [Inference and Prediction Using FPCA: Application to Diabetic Kidney Disease Progression in the CRIC Study. arXiv:2210.11540.](https://arxiv.org/pdf/2210.11540) | 만성신장질환 코호트 eGFR 종단궤적 | 3~4개 성분으로 누적분산 95%+ | 초기 방문 데이터만으로 향후 급속진행군(rapid progressor) 조기 판별(정량 AUC 미확인, 원문 재확인 필요) |
+| [Predicting health outcomes with intensive longitudinal data collected by mobile health devices: a functional principal component regression approach. PMC10944610. 2024.](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10944610/) | 3개월간 아침 식전 혈당 종단측정 곡선 → FPC score로 HbA1c 회귀 | 원문 재확인 필요 | R²=0.61(3개월 혈당 곡선이 HbA1c 변동의 61% 설명) |
+
+**핵심 시사점**: Ahn 2022(CT 밀도곡선)는 FPCA 성분이 사전정의 요약통계와 **대등한
+수준**(AUC 차이 <0.02)이라는 결과이고, Anderson(콜레스테롤)은 FPCA가 단순 대체
+방법(LVCF)보다 **유의하게 우수**(AUC +0.10)하다는 결과 — 두 논문의 대조군 성격이
+다르므로([[project_step3_fpca_overfitting]]에서 확인한 clinic4-only baseline 대비
+FPCA 추가의 internal 개선/external 저하 패턴을 어느 쪽 선례에 비교할지는) 대조군
+정의를 맞춰서 재검토할 것.
+
 ## 참고 (도메인 오인 — BIA/EIM 전제 조사, 폐기됨)
 
 세션 초반 AEC를 BIA/EIM 전기임피던스 전류로 오인하고 조사한 레퍼런스(Sanchez &

@@ -89,7 +89,7 @@ def segment_means(aec_matrix: np.ndarray, n_seg: int) -> np.ndarray:
     return np.column_stack([c.mean(axis=1) for c in chunks])
 
 
-# output feature 각각과 clinic4 변수 각각의 단순 Pearson r/p를 산출
+# output feature 각각과 clinic4 변수 각각의 단순 Pearson |r|/p를 산출(부호는 버리고 절대값만 사용)
 def feature_clinic4_correlations(clinic: pd.DataFrame, meta: pd.DataFrame, cohort: str) -> list[dict]:
     rows = []
     for feat in FEATURES:
@@ -100,11 +100,11 @@ def feature_clinic4_correlations(clinic: pd.DataFrame, meta: pd.DataFrame, cohor
             r, p = stats.pearsonr(x_all[mask], y_all[mask])
             rows.append({"feature": FEATURES[feat], "predictor_group": "clinic4", "predictor": var,
                          "cohort": cohort, "n_seg": np.nan, "segment": np.nan,
-                         "r": float(r), "p_value": float(p), "n": int(mask.sum())})
+                         "r": float(abs(r)), "p_value": float(p), "n": int(mask.sum())})
     return rows
 
 
-# output feature 각각과 구간 수 n_seg의 AEC 구간평균 각 구간 간 단순 Pearson r/p를 산출
+# output feature 각각과 구간 수 n_seg의 AEC 구간평균 각 구간 간 단순 Pearson |r|/p를 산출(부호는 버리고 절대값만 사용)
 def feature_aec_correlations(aec_seg: np.ndarray, meta: pd.DataFrame, n_seg: int, cohort: str) -> list[dict]:
     rows = []
     for feat in FEATURES:
@@ -115,7 +115,7 @@ def feature_aec_correlations(aec_seg: np.ndarray, meta: pd.DataFrame, n_seg: int
             r, p = stats.pearsonr(x[:, seg_i], y)
             rows.append({"feature": FEATURES[feat], "predictor_group": "aec_segment",
                          "predictor": f"seg{n_seg}_{seg_i + 1}", "cohort": cohort, "n_seg": n_seg,
-                         "segment": seg_i + 1, "r": float(r), "p_value": float(p), "n": int(mask_y.sum())})
+                         "segment": seg_i + 1, "r": float(abs(r)), "p_value": float(p), "n": int(mask_y.sum())})
     return rows
 
 
@@ -127,7 +127,7 @@ def write_correlation_rows(rows: list[dict], correlation_csv: Path) -> None:
     print(f"Saved correlation rows to {correlation_csv}")
 
 
-# output feature x clinic4 상관계수를 internal/external 나란히 히트맵으로 시각화(칸에 r).
+# output feature x clinic4 상관계수를 internal/external 나란히 히트맵으로 시각화(칸에 |r|, 0~1 순차 컬러맵).
 # feature 9개 기준 셀 텍스트가 겹치지 않도록 행 수(n_feat)에 비례해 figure 높이를 잡고,
 # suptitle/서브플롯 title이 겹치지 않도록 상단 여백을 inch 단위로 직접 확보한다
 def plot_feature_clinic4_correlation_heatmap(corr_df: pd.DataFrame, clinic_vars: list[str], out_path: Path) -> None:
@@ -147,12 +147,12 @@ def plot_feature_clinic4_correlation_heatmap(corr_df: pd.DataFrame, clinic_vars:
         mat = corr_df[corr_df["cohort"] == cohort].pivot(index="feature", columns="predictor", values="r")
         mat = mat.loc[features, clinic_vars]
 
-        im = ax.imshow(mat.to_numpy(), vmin=-1, vmax=1, cmap="RdBu_r", aspect="auto")
+        im = ax.imshow(mat.to_numpy(), vmin=0, vmax=1, cmap="Reds", aspect="auto")
         for i in range(mat.shape[0]):
             for j in range(mat.shape[1]):
                 r_val = mat.iat[i, j]
                 ax.text(j, i, f"{r_val:.2f}", ha="center", va="center",
-                        fontsize=20, color="white" if abs(r_val) > 0.5 else INK_PRIMARY)
+                        fontsize=20, color="white" if r_val > 0.5 else INK_PRIMARY)
 
         ax.set_xticks(range(n_clinic))
         ax.set_xticklabels(clinic_vars, fontsize=18)
@@ -161,8 +161,8 @@ def plot_feature_clinic4_correlation_heatmap(corr_df: pd.DataFrame, clinic_vars:
         ax.set_title(cohort, fontsize=20, fontweight="bold", color=INK_PRIMARY, pad=10)
 
     fig.subplots_adjust(top=1 - top_margin_in / fig_h, wspace=0.5)
-    fig.colorbar(im, ax=axes, fraction=0.03, pad=0.02, label="Pearson r")
-    fig.suptitle("Output feature vs clinic4 Pearson r", fontsize=20, fontweight="bold", color=INK_PRIMARY, y=0.99)
+    fig.colorbar(im, ax=axes, fraction=0.03, pad=0.02, label="|Pearson r|")
+    fig.suptitle("Output feature vs clinic4 |Pearson r|", fontsize=20, fontweight="bold", color=INK_PRIMARY, y=0.99)
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved feature-clinic4 correlation heatmap to {out_path}")
@@ -187,13 +187,13 @@ def plot_feature_aec_correlation_heatmap(corr_df: pd.DataFrame, segment_counts: 
             ax = axes[row, col]
             sub = corr_df[(corr_df["n_seg"] == n_seg) & (corr_df["cohort"] == cohort)]
             mat = sub.pivot(index="feature", columns="segment", values="r").loc[features]
-            im = ax.imshow(mat.to_numpy(), vmin=-1, vmax=1, cmap="RdBu_r", aspect="auto")
+            im = ax.imshow(mat.to_numpy(), vmin=0, vmax=1, cmap="Reds", aspect="auto")
             if n_seg <= 8:
                 for i in range(mat.shape[0]):
                     for j in range(mat.shape[1]):
                         r_val = mat.iat[i, j]
                         ax.text(j, i, f"{r_val:.2f}", ha="center", va="center", fontsize=11,
-                                color="white" if abs(r_val) > 0.5 else INK_PRIMARY)
+                                color="white" if r_val > 0.5 else INK_PRIMARY)
             ax.set_yticks(range(n_feat))
             ax.set_yticklabels(features if col == 0 else [], fontsize=15)
             ax.set_xticks([])
@@ -212,8 +212,8 @@ def plot_feature_aec_correlation_heatmap(corr_df: pd.DataFrame, segment_counts: 
     y0, y1 = min(p.y0 for p in all_pos), max(p.y1 for p in all_pos)
     x1 = max(p.x1 for p in all_pos)
     cax = fig.add_axes((x1 + 0.02, y0, 0.02, y1 - y0))
-    fig.colorbar(im, cax=cax, label="Pearson r")
-    fig.suptitle("Output feature vs AEC segment-mean Pearson r (row=n_seg)",
+    fig.colorbar(im, cax=cax, label="|Pearson r|")
+    fig.suptitle("Output feature vs AEC segment-mean |Pearson r| (row=n_seg)",
                  fontsize=20, fontweight="bold", color=INK_PRIMARY, y=0.995)
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
