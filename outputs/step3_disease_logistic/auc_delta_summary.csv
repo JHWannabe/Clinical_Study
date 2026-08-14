@@ -1,0 +1,7 @@
+feature,cohort,aec_combo,auc_clinic4,auc_clinic4_aec_best,delta_auc_aec_best_minus_clinic4,delong_z,delong_p_value
+HTN,internal,FPCA,0.8082,0.8177,0.0094,1.8858,0.0593
+HTN,external,FPCA,0.715,0.7313,0.0164,2.7851,0.0054
+DM,internal,FPCA,0.7275,0.752,0.0246,2.6881,0.0072
+DM,external,FPCA,0.6625,0.6992,0.0367,3.7472,0.0002
+CKD,internal,FPCA,0.7903,0.8066,0.0163,1.3393,0.1805
+CKD,external,FPCA,0.6215,0.6436,0.0221,2.3307,0.0198
