@@ -32,8 +32,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "past_step4_scanner_subgroup"
-STEP3_DIR = PROJECT_ROOT / "outputs" / "past_step3_logistic"  # step3_clinic_aec_logistic.py가 쓴 scanner_subgroup_auc.csv 위치
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0821" / "step4_scanner_subgroup"
+STEP3_DIR = PROJECT_ROOT / "outputs" / "0821" / "step3_logistic"  # step3_clinic_aec_logistic.py가 쓴 scanner_subgroup_auc.csv 위치
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"

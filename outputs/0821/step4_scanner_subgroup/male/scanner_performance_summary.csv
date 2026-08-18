@@ -1,0 +1,10 @@
+cohort,scanner,n,r2_clinic4,r2_aec,auc_clinic4,auc_aec,r2_delta,auc_delta
+internal,Ingenuity Core 128,111,0.1782,0.3033,0.7824,0.8613,0.125,0.079
+internal,Revolution CT,69,0.1889,0.1903,0.7835,0.809,0.0014,0.0254
+internal,SOMATOM Definition AS+,85,0.1235,0.2244,0.6361,0.7761,0.1009,0.14
+internal,Sensation 64,122,0.1955,0.2912,0.6386,0.739,0.0957,0.1004
+external,Revolution EVO,61,0.0448,0.2086,0.6657,0.7678,0.1638,0.1021
+external,SOMATOM Definition AS+,84,0.3443,0.2648,0.8475,0.8566,-0.0794,0.0091
+external,SOMATOM Definition Flash,115,0.2885,0.2413,0.8091,0.7856,-0.0472,-0.0235
+external,SOMATOM Force,58,0.3338,0.3124,0.8301,0.8335,-0.0214,0.0034
+external,iCT 256,52,0.1312,0.1778,0.7139,0.7033,0.0466,-0.0106

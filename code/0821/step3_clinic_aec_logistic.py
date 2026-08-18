@@ -38,7 +38,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "past_step3_logistic"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0821" / "step3_logistic"
 AUC_DELTA_SCOPES = ["total", "male", "female"]
 AUC_DELTA_COHORT_ORDER = ["internal", "external"]
 

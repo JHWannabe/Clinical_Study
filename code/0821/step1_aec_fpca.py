@@ -20,7 +20,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "past_step1_fpca"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0821" / "step1_fpca"
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 SEED = 20260709

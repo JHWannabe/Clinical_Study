@@ -26,7 +26,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "past_step2_linear"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "0821" / "step2_linear"
 
 INTERNAL_XLSX = DATA_DIR / "gangnam.xlsx"
 EXTERNAL_XLSX = DATA_DIR / "sinchon.xlsx"
@@ -322,6 +322,10 @@ def evaluate_features(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, models: di
 
         mask_int = np.isfinite(y_int_all)
         mask_ext = np.isfinite(y_ext_all)
+        # 컬럼 전체 결측 등으로 유효 샘플이 없으면(회귀/부트스트랩 불가) 이 feature는 건너뜀
+        if mask_int.sum() < 2 or mask_ext.sum() < 2:
+            print(f"[{feat}] 유효 샘플 부족(internal={mask_int.sum()}, external={mask_ext.sum()}) - 평가 건너뜀")
+            continue
         y_int, y_ext = y_int_all[mask_int], y_ext_all[mask_ext]
 
         model_stats = {}
@@ -367,8 +371,14 @@ def save_summary_and_plot(summary: pd.DataFrame, model_order: list[str], feature
     print(f"\n=== external (frozen) R^2 ({name}) ===")
     print(pivot_ext[model_order].round(4))
 
+    # evaluate_features에서 유효 샘플 부족으로 건너뛴 feature는 그래프 대상에서도 제외(KeyError 방지)
+    available_features = {k: v for k, v in features_dict.items() if k in summary["feature"].unique()}
+    if len(available_features) < len(features_dict):
+        skipped = sorted(set(features_dict) - set(available_features))
+        print(f"[{name}] 유효 샘플 부족으로 그래프에서 제외된 feature: {skipped}")
+
     plot_model_order = [m for m in model_order if m not in ("clinic4_aec_sd", "clinic4_aec_skew")]
-    plot_r2_comparison(summary, plot_model_order, features_dict, fpca_n, output_dir / f"clinic_aec_{name}_r2_comparison.png")
+    plot_r2_comparison(summary, plot_model_order, available_features, fpca_n, output_dir / f"clinic_aec_{name}_r2_comparison.png")
 
 
 # clinic4(include_sex=False면 clinic3) baseline과, +AEC 형태 feature(SD/Skewness/상하위50%비율/전체결합)를 추가한

@@ -10,9 +10,10 @@ from __future__ import annotations
 # internal OOF AUC가 가장 높은 조합을 선택한다(select_best_shape_model_per_feature, 사용자 확인: "3질환
 # 평균 기준 공통 조합 하나만 채택하지 말고 질환별 개별 최적으로 변경해" - 질환마다 AEC 곡선과의 연관 형태가
 # 다를 수 있어 공통 조합을 강제하면 일부 질환에서 최적이 아닌 조합이 쓰이게 됨). FPCA n_components도 AUC 기반이 아니라
-# internal 코호트 scree curve의 elbow(Kneedle 방식: 축 정규화 후 첫점-끝점 직선까지 수직거리 최대 지점)로
-# 계산한다(사용자 확인: "R제곱값 말고 누적분산비율로 확인해" 이후 "elbow로 교체해서 재확인" -
-# project_fpca_n3_vs_n12_comparison의 고정값 n=3 대신 적용).
+# internal 코호트 scree curve의 elbow(Kneedle 방식: 축 정규화 후 첫점-끝점 직선까지 수직거리 최대 지점)를
+# 참고로 계산하되(사용자 확인: "R제곱값 말고 누적분산비율로 확인해" 이후 "elbow로 교체해서 재확인" -
+# project_fpca_n3_vs_n12_comparison의 고정값 n=3 대신 적용), 실제 채택값은 사용자 확인 2026-08-14:
+# "컴포넌트 수를 6으로 해줘"에 따라 6으로 고정한다(FPCA_N_FIXED, select_best_fpca_n 참고).
 # 그 외 DeLong test/ROC 비교/AUC delta 요약표 로직은 원본 step3와 동일하게 유지한다.
 # 스캐너 서브그룹 AUC/Se/Sp/Acc 분석은 code/step4_clinic_aec_disease_scanner.py로 분리했다(사용자 확인: "step4 py파일을
 # 생성해서 scanner별 auc, se/sp/acc를 확인해" - [[feedback_output_dir_single_producer]] 원칙에 따라 이 스크립트는
@@ -46,9 +47,20 @@ N_FOLDS = 5
 SEED = 20260709
 N_SLICES = 128
 AEC_COLS = [f"aec_{i}" for i in range(1, N_SLICES + 1)]
+# 사용자 확인 2026-08-18: "input feature로 vat/sat 값도 추가해줘" 이후 "VAT_COL, SAT_COL을 따로 넣지 말고
+# VAT/SAT 비율로 넣어", "구 clinic4 vs clinic5+aec feature로 비교해" - baseline은 원래 clinic4(sex/age/
+# height/weight)를 그대로 유지하고, AEC를 더하는 쪽 모델에만 VAT/SAT 비율 1개를 추가로 얹어 clinic5+AEC로
+# 비교한다(clinical_matrix의 include_vat_sat_ratio 플래그로 baseline/AEC-best 모델이 서로 다른 clinic
+# 컬럼셋을 쓰도록 분기, load_cohort에서 비율을 미리 계산)
+VAT_COL = "VAT(내장지방)_SUM"
+SAT_COL = "SAT(피하지방)_SUM"
+VAT_SAT_RATIO_COL = "VAT_SAT_ratio"
+CLINICAL_BASE_COLS = ["PatientAge", "Height", "Weight"]  # clinic4/clinic3 baseline(변경 없음)
+ALL_CLINICAL_COLS = CLINICAL_BASE_COLS + [VAT_SAT_RATIO_COL]  # clinic5/clinic4(no-sex)까지 포함한 결측 체크용
 FPCA_COMPONENT_CANDIDATES_MAX = 20  # 사용자 확인: FPCA n_components는 R^2/AUC가 아니라 scree curve elbow로
                                      # 결정([[project_fpca_n3_vs_n12_comparison]]의 고정값 n=3 대신 계산,
                                      # step2_clinic_aec_disease_select.py와 elbow 로직 동일하게 맞춤)
+FPCA_N_FIXED = 3  # 사용자 확인 2026-08-14: n=3/6/12 비교 검토 후 elbow 참고값과 동일한 3으로 재확정(step2와 동일)
 MIN_POSITIVES = 2  # 이 미만이면 ROC/logistic 자체가 정의되지 않아 해당 feature/cohort를 skip
 
 # 예측 대상(진단 이진값, 이미 0/1) -> 파일명에 쓸 slug. HTN/DM/CKD는 metadata에 이미 진단 여부로 존재하므로
@@ -56,12 +68,15 @@ MIN_POSITIVES = 2  # 이 미만이면 ROC/logistic 자체가 정의되지 않아
 FEATURES: dict[str, str] = {"HTN": "htn", "DM": "dm", "CKD": "ckd"}
 
 
-# 엑셀 metadata 시트를 로드하고 aec_128 시트의 raw 128포인트를 PatientID 기준으로 병합
+# 엑셀 metadata 시트를 로드하고 aec_128 시트의 raw 128포인트를 PatientID 기준으로 병합, VAT/SAT SUM 절대값으로
+# VAT/SAT 비율(clinic5+AEC 모델의 input feature)을 함께 계산해 둔다
 def load_cohort(xlsx_path: Path) -> pd.DataFrame:
     meta = pd.read_excel(xlsx_path, sheet_name="metadata", engine="openpyxl").reset_index(drop=True)
     aec = pd.read_excel(xlsx_path, sheet_name="aec_128", engine="openpyxl")
     merged = meta.merge(aec[["PatientID"] + AEC_COLS], on="PatientID", how="inner")
     assert len(merged) == len(meta), f"{xlsx_path.name}: metadata/aec_128 merge dropped rows"
+    merged[VAT_SAT_RATIO_COL] = (pd.to_numeric(merged[VAT_COL], errors="coerce")
+                                  / pd.to_numeric(merged[SAT_COL], errors="coerce"))
     return merged
 
 
@@ -102,20 +117,22 @@ def _scree_and_elbow_distance(cum_var: pd.Series) -> tuple[pd.Series, pd.Series]
 
 
 # internal 코호트 AEC-128 곡선의 scree curve에서 elbow(첫점-끝점 직선까지 수직거리가 최대인 지점)를
-# n_components로 선택한다(step2_clinic_aec_disease_select.py의 select_best_fpca_n과 동일 로직). 다운스트림
+# 참고용으로 계산한다(step2_clinic_aec_disease_select.py의 select_best_fpca_n과 동일 로직). 다운스트림
 # 예측성능(AUC/R^2)으로 n을 고르면 그 성능 자체가 선택 기준에 쓰인 데이터로 최적화되어 낙관적으로
 # 부풀려질 위험이 있어(사용자 확인: "R제곱값 말고 누적분산비율로 확인해" 이후 "elbow로 교체해서 재확인"),
-# FPCA/PCA 표준 scree test 관행대로 분산 감소 패턴만으로 n을 정한다
+# FPCA/PCA 표준 scree test 관행대로 분산 감소 패턴만으로 n을 정했으나, 최종 n_components는 사용자 확인
+# 2026-08-14: "컴포넌트 수를 6으로 해줘"에 따라 FPCA_N_FIXED(6)로 고정한다(elbow 값은 비교 참고용으로 유지)
 def select_best_fpca_n(aec_int_raw: np.ndarray) -> tuple[int, pd.Series]:
     max_components = min(FPCA_COMPONENT_CANDIDATES_MAX, aec_int_raw.shape[0], aec_int_raw.shape[1])
     pca = PCA(n_components=max_components, random_state=SEED).fit(aec_int_raw)
     cum_var = pd.Series(np.cumsum(pca.explained_variance_ratio_), index=range(1, max_components + 1))
     _, dist = _scree_and_elbow_distance(cum_var)
-    best_n = int(dist.idxmax())
+    elbow_n = int(dist.idxmax())
+    best_n = FPCA_N_FIXED
 
     print(f"[FPCA] n_components별 누적 explained variance ratio:\n{cum_var.round(4)}")
-    print(f"[FPCA] 선택된 elbow n_components = {best_n} (누적분산비율={cum_var[best_n]:.4f}, "
-          f"chord-거리={dist[best_n]:.4f})")
+    print(f"[FPCA] elbow 참고값 n_components = {elbow_n} (누적분산비율={cum_var[elbow_n]:.4f}, "
+          f"chord-거리={dist[elbow_n]:.4f}) / 실제 채택 n_components = {best_n}(고정)")
     return best_n, cum_var
 
 
@@ -123,19 +140,38 @@ def select_best_fpca_n(aec_int_raw: np.ndarray) -> tuple[int, pd.Series]:
 # 저장(그래프의 원자료)
 def save_cum_var_excel(cum_var: pd.Series, best_n: int, out_path: Path) -> None:
     scree, dist = _scree_and_elbow_distance(cum_var)
+    elbow_n = int(dist.idxmax())
     df = pd.DataFrame({"n_components": cum_var.index, "cumulative_variance_ratio": cum_var.values,
                         "individual_variance_ratio": scree.values, "elbow_chord_distance": dist.values})
+    df["is_elbow_reference"] = df["n_components"] == elbow_n
     df["selected_best_n"] = df["n_components"] == best_n
     df.to_excel(out_path, index=False)
     print(f"Saved FPCA cumulative variance ratio to {out_path}")
 
 
-# age/height/weight 행렬 구성 + 표준화 + (include_sex시) sex 열 + (있으면) AEC feature도 별도 표준화해 결합
-# (step3_clinic_aec_logistic.py의 clinical_matrix()와 동일)
+# internal 전체로 fit한 FPCA(n=FPCA_N_FIXED)를 external에 frozen 적용한 환자별 컴포넌트 값을 PatientID와
+# 함께 엑셀로 저장(추후 확인용). select_best_shape_model_per_feature 내부에서도 동일한 fpca_scores()
+# 호출로 같은 값이 재계산되지만(질환/arm에 무관하게 aec_int_raw/aec_ext_raw/n_fpca만으로 결정), 그 값은
+# candidate 선택용으로만 쓰이고 별도 저장되지 않아 이 함수를 추가한다
+def save_fpca_scores_excel(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, fpca_int: np.ndarray,
+                            fpca_ext: np.ndarray, out_path: Path) -> None:
+    cols = [f"FPCA{i}" for i in range(1, fpca_int.shape[1] + 1)]
+    df_int = pd.DataFrame(fpca_int, columns=cols)
+    df_int.insert(0, "PatientID", meta_int["PatientID"].to_numpy())
+    df_ext = pd.DataFrame(fpca_ext, columns=cols)
+    df_ext.insert(0, "PatientID", meta_ext["PatientID"].to_numpy())
+    write_sheets(out_path, {"internal": df_int, "external": df_ext})
+
+
+# age/height/weight(+include_vat_sat_ratio시 VAT/SAT 비율) 행렬 구성 + 표준화 + (include_sex시) sex 열 +
+# (있으면) AEC feature도 별도 표준화해 결합. clinic4 baseline은 include_vat_sat_ratio=False로 기존 3개
+# 임상변수만 쓰고, clinic5_aec_best 모델만 True로 VAT/SAT 비율을 추가한다(사용자 확인 2026-08-18: "구 clinic4
+# vs clinic5+aec feature로 비교해")
 def clinical_matrix(meta: pd.DataFrame, aec_extra: np.ndarray | None = None, scaler: StandardScaler | None = None,
-                     aec_scaler: StandardScaler | None = None,
-                     include_sex: bool = True) -> tuple[np.ndarray, StandardScaler, StandardScaler | None]:
-    rest = meta[["PatientAge", "Height", "Weight"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+                     aec_scaler: StandardScaler | None = None, include_sex: bool = True,
+                     include_vat_sat_ratio: bool = False) -> tuple[np.ndarray, StandardScaler, StandardScaler | None]:
+    cols = CLINICAL_BASE_COLS + ([VAT_SAT_RATIO_COL] if include_vat_sat_ratio else [])
+    rest = meta[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
     if scaler is None:
         scaler = StandardScaler().fit(rest)
     scaled = scaler.transform(rest)
@@ -155,13 +191,14 @@ def n_splits_for(y: np.ndarray) -> int:
     return max(2, min(N_FOLDS, n_pos, n_neg))
 
 
-# FPCA score가 들어간 clinic4_aec_best 모델(logistic)의 internal OOF 확률을 산출. PCA(고유함수 추정)를
+# FPCA score가 들어간 AEC-best 모델(logistic)의 internal OOF 확률을 산출. PCA(고유함수 추정)를
 # 전체 데이터로 먼저 fit하고 나서 CV를 돌리면 검증 fold의 곡선 정보가 고유함수 추정에 이미 들어가 OOF AUC가
 # 낙관적으로 부풀려지는 data leakage가 된다 - 그래서 PCA.fit을 fold의 train 구간에서만 수행한다
-# (shape_extra_full은 fold와 무관하게 이미 각 샘플별로 독립 계산된 값 - leak 아님, None이면 미포함)
+# (shape_extra_full은 fold와 무관하게 이미 각 샘플별로 독립 계산된 값 - leak 아님, None이면 미포함).
+# include_vat_sat_ratio는 호출하는 arm이 clinic4_aec_best(False)인지 clinic5_aec_best(True)인지에 따라 다르다
 def _fpca_oof_proba_predict(meta: pd.DataFrame, aec_raw: np.ndarray, shape_extra_full: np.ndarray | None,
                              y_full: np.ndarray, mask: np.ndarray, n_fpca: int, include_sex: bool,
-                             cv: StratifiedKFold) -> np.ndarray:
+                             cv: StratifiedKFold, include_vat_sat_ratio: bool) -> np.ndarray:
     aec_masked = aec_raw[mask]
     meta_masked = meta.loc[mask].reset_index(drop=True)
     shape_masked = shape_extra_full[mask] if shape_extra_full is not None else None
@@ -180,9 +217,10 @@ def _fpca_oof_proba_predict(meta: pd.DataFrame, aec_raw: np.ndarray, shape_extra
             extra_train, extra_test = fpca_train, fpca_test
 
         x_train, scaler, aec_scaler = clinical_matrix(meta_masked.iloc[train_idx], extra_train,
-                                                        include_sex=include_sex)
+                                                        include_sex=include_sex,
+                                                        include_vat_sat_ratio=include_vat_sat_ratio)
         x_test, _, _ = clinical_matrix(meta_masked.iloc[test_idx], extra_test, scaler, aec_scaler,
-                                        include_sex=include_sex)
+                                        include_sex=include_sex, include_vat_sat_ratio=include_vat_sat_ratio)
 
         model = LogisticRegression(max_iter=2000).fit(x_train, y[train_idx])
         oof[test_idx] = model.predict_proba(x_test)[:, 1]
@@ -200,10 +238,14 @@ FPCA_CANDIDATE_KINDS = {"aec_fpca": "fpca_only", "aec_shape_all": "shape_all"}
 # (내부 CV로만 모델 선택, [[feedback_internal_external_validation_discipline]]). 원본 step3의
 # select_best_shape_model은 연속값에 linear regression, R^2로 조합을 선택했으나 HTN/DM/CKD는 이미
 # 이진값이라 연속값 proxy가 없으므로 logistic regression + AUC로 바꿨다(사용자 확인: "linear는 제외해").
-# fpca_int/fpca_ext는 전체 internal 코호트로 fit한 뒤 external에는 frozen 적용하는 최종 후보 계수 산출용
+# fpca_int/fpca_ext는 전체 internal 코호트로 fit한 뒤 external에는 frozen 적용하는 최종 후보 계수 산출용.
+# 사용자 확인 2026-08-18: "clinic4 vs clinic4+AEC(best) vs clinic5+AEC(best)로 비교해" - clinic4_aec_best와
+# clinic5_aec_best는 각각 자기 baseline(VAT/SAT 비율 유무) 위에서 독립적으로 최적 AEC 조합을 고르므로,
+# 이 함수를 include_vat_sat_ratio=False/True로 두 번 호출해 서로 다른 best 조합을 얻는다
 def select_best_shape_model_per_feature(meta_int: pd.DataFrame, aec_int_raw: np.ndarray, aec_ext_raw: np.ndarray,
                                          include_sex: bool, target_features: list[str],
-                                         n_fpca: int) -> dict[str, tuple[str, np.ndarray, np.ndarray]]:
+                                         n_fpca: int, include_vat_sat_ratio: bool
+                                         ) -> dict[str, tuple[str, np.ndarray, np.ndarray]]:
     shape_int, shape_ext = shape_features(aec_int_raw), shape_features(aec_ext_raw)
     fpca_int, fpca_ext = fpca_scores(aec_int_raw, aec_ext_raw, n_fpca)
     shape_int_stack = np.column_stack([shape_int["sd"], shape_int["skew"], shape_int["upper_lower_ratio"]])
@@ -224,7 +266,8 @@ def select_best_shape_model_per_feature(meta_int: pd.DataFrame, aec_int_raw: np.
         fpca_kind = FPCA_CANDIDATE_KINDS.get(name)
         x_int_all = None
         if fpca_kind is None:
-            x_int_all, _, _ = clinical_matrix(meta_int, aec_int, include_sex=include_sex)
+            x_int_all, _, _ = clinical_matrix(meta_int, aec_int, include_sex=include_sex,
+                                               include_vat_sat_ratio=include_vat_sat_ratio)
         for feat in target_features:
             y_all = pd.to_numeric(meta_int[feat], errors="coerce").to_numpy(dtype=float)
             mask = np.isfinite(y_all)
@@ -238,7 +281,7 @@ def select_best_shape_model_per_feature(meta_int: pd.DataFrame, aec_int_raw: np.
             else:
                 shape_extra = shape_int_stack if fpca_kind == "shape_all" else None
                 oof = _fpca_oof_proba_predict(meta_int, aec_int_raw, shape_extra, y_all, mask, n_fpca,
-                                               include_sex, cv)
+                                               include_sex, cv, include_vat_sat_ratio)
             auc_by_feature[feat][name] = float(roc_auc_score(y, oof))
 
     best_by_feature: dict[str, tuple[str, np.ndarray, np.ndarray]] = {}
@@ -288,7 +331,7 @@ def _delong_covariance(scores: np.ndarray, n_pos: int) -> tuple[np.ndarray, np.n
 
 
 # 같은 환자 집합(같은 y)에서 나온 두 예측 점수(score_a vs score_b)의 AUC가 서로 다른지 검정하는 paired DeLong test.
-# clinic4와 clinic4+AEC는 동일 환자에 대해 평가되므로 독립 two-sample test가 아니라 이 paired test를 써야 함
+# clinic4와 clinic5+AEC는 동일 환자에 대해 평가되므로 독립 two-sample test가 아니라 이 paired test를 써야 함
 def delong_paired_auc_test(y: np.ndarray, score_a: np.ndarray, score_b: np.ndarray) -> dict:
     order = np.argsort(-y)
     y_sorted = y[order]
@@ -340,15 +383,22 @@ def write_sheets(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
     print(f"Saved sheet(s) {list(sheets)} to {path}")
 
 
-# feature(질환) 하나에 대해 internal(OOF)/external(frozen) ROC curve를 clinic4/clinic4_aec_best 2개 모델
-# 겹쳐 그림. 범례에 AUC(95%CI)와 그 질환에서 선택된 AEC 조합명을 표시하고, 제목에 DeLong test(clinic4 vs
-# clinic4_aec_best) p-value와 유의/비유의 판정(p<0.05)을 함께 표기
+# feature(질환) 하나에 대해 internal(OOF)/external(frozen) ROC curve를 clinic4/clinic4_aec_best/
+# clinic5_aec_best 3개 모델 겹쳐 그림(사용자 확인 2026-08-18: "clinic4 vs clinic4+AEC(best) vs
+# clinic5+AEC(best)로 비교해"). 범례에 AUC(95%CI)와 그 질환/arm에서 선택된 AEC 조합명을 표시하고, 제목에
+# DeLong test(clinic4 vs 각 AEC-best 모델) p-value 2개를 함께 표기해 "AEC 단독 효과"와 "VAT/SAT비+AEC
+# 결합 효과"를 한눈에 구분한다
 def plot_roc_dual(feat: str, model_order: list[str], curves: dict[str, dict[str, np.ndarray]],
                    stats_by_model: dict[str, dict[str, dict]],
-                   delong_by_model: dict[str, dict[str, dict]], out_path: Path, aec_label: str) -> None:
+                   delong_by_model: dict[str, dict[str, dict]], out_path: Path,
+                   aec_label_by_model: dict[str, str]) -> None:
     INK_PRIMARY = "#161616"
-    colors = {"clinic4": "#2a78d6", "clinic4_aec_best": "#e2622e"}
-    labels = {"clinic4": "clinic4", "clinic4_aec_best": f"clinic4 + AEC({aec_label})"}
+    colors = {"clinic4": "#2a78d6", "clinic4_aec_best": "#1baf7a", "clinic5_aec_best": "#e2622e"}
+    labels = {
+        "clinic4": "clinic4",
+        "clinic4_aec_best": f"clinic4 + AEC({aec_label_by_model.get('clinic4_aec_best', '')})",
+        "clinic5_aec_best": f"clinic5(+VAT/SAT비) + AEC({aec_label_by_model.get('clinic5_aec_best', '')})",
+    }
     cohorts = ["internal", "external"]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
@@ -361,16 +411,19 @@ def plot_roc_dual(feat: str, model_order: list[str], curves: dict[str, dict[str,
             ax.plot(fpr, tpr, color=colors[model_name], linewidth=1.8,
                     label=f"{labels[model_name]} AUC={s['auc']:.3f}")
         ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1)
-        p = delong_by_model["clinic4_aec_best"][cohort]["p_value"]
-        p_label = "p<0.001" if p < 0.001 else f"p={p:.3f}"
-        sig_label = "유의" if p < 0.05 else "비유의"
-        ax.set_title(f"{feat} ({cohort})\n{p_label}", fontsize=20,
-                     fontweight="bold", color=INK_PRIMARY)
+
+        def _p_label(model_name: str) -> str:
+            p = delong_by_model[model_name][cohort]["p_value"]
+            return "p<0.001" if p < 0.001 else f"p={p:.3f}"
+
+        title = (f"{feat} ({cohort})\n"
+                 f"AEC: {_p_label('clinic4_aec_best')} / VAT/SAT비+AEC: {_p_label('clinic5_aec_best')}")
+        ax.set_title(title, fontsize=18, fontweight="bold", color=INK_PRIMARY)
         ax.set_xlabel("1 - Specificity")
         ax.set_ylabel("Sensitivity")
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1.02)
-        ax.legend(fontsize=16, loc="upper center", bbox_to_anchor=(0.5, -0.18), frameon=False)
+        ax.legend(fontsize=14, loc="upper center", bbox_to_anchor=(0.5, -0.2), frameon=False)
         ax.grid(alpha=0.3)
 
     fig.tight_layout()
@@ -389,13 +442,14 @@ AEC_CANDIDATE_LABELS = {
 }
 
 
-# 전체 feature(질환)에 걸쳐 AUC(95%CI)를 2개 모델 x internal/external로 비교하는 막대그래프.
-# clinic4_aec_best는 질환마다 선택된 AEC 조합이 달라 범례에 특정 조합명을 못 박지 않고 일반화된 라벨을
+# 전체 feature(질환)에 걸쳐 AUC(95%CI)를 3개 모델 x internal/external로 비교하는 막대그래프.
+# AEC-best 모델은 질환/arm마다 선택된 AEC 조합이 달라 범례에 특정 조합명을 못 박지 않고 일반화된 라벨을
 # 쓴다 - 질환별 실제 조합명은 auc_delta_summary 표의 "AEC 조합" 열과 ROC plot 범례에서 확인 가능
 def plot_auc_summary(summary: pd.DataFrame, model_order: list[str], out_path: Path) -> None:
     INK_PRIMARY = "#161616"
-    colors = {"clinic4": "#6b6a66", "clinic4_aec_best": "#e2622e"}
-    labels = {"clinic4": "clinic4", "clinic4_aec_best": "+AEC(질환별 최적조합)"}
+    colors = {"clinic4": "#6b6a66", "clinic4_aec_best": "#1baf7a", "clinic5_aec_best": "#e2622e"}
+    labels = {"clinic4": "clinic4", "clinic4_aec_best": "+AEC(질환별 최적조합)",
+              "clinic5_aec_best": "+VAT/SAT비+AEC(질환별 최적조합)"}
     features = [f for f in FEATURES if f in summary["feature"].unique()]
     slugs = [FEATURES[f] for f in features]
     x = np.arange(len(features))
@@ -427,11 +481,14 @@ def plot_auc_summary(summary: pd.DataFrame, model_order: list[str], out_path: Pa
     print(f"Saved AUC summary plot to {out_path}")
 
 
-# clinic4(include_sex=False면 clinic3) baseline과, clinic4+AEC(5개 후보 중 질환별 internal-best 조합) 2개
-# 모델로 HTN/DM/CKD 3개 진단을 logistic regression 예측. metadata의 HTN/DM/CKD 값을 그대로 라벨로 쓰고
-# (cutoff 도출 없음), internal OOF로 모델을 학습/평가하고 external에는 고정 모델을 1회만 적용(freeze),
-# AUC는 DeLong test(clinic4 vs clinic4_aec_best)로 비교, 스캐너별 서브그룹 AUC도 함께 산출.
-# AEC 조합은 질환마다 독립적으로 고른 최적 조합을 쓴다(select_best_shape_model_per_feature)
+# clinic4(sex/age/height/weight, include_sex=False면 clinic3) baseline과, 여기에 AEC만 추가한
+# clinic4_aec_best, VAT/SAT 비율+AEC를 함께 추가한 clinic5_aec_best까지 3개 모델로 HTN/DM/CKD 3개 진단을
+# logistic regression 예측한다(사용자 확인 2026-08-18: "clinic4 vs clinic4+AEC(best) vs clinic5+AEC(best)로
+# 비교해" - clinic4_aec_best와 clinic5_aec_best를 나란히 두어 AEC 단독 효과와 VAT/SAT+AEC 결합 효과를
+# 분리해서 본다). metadata의 HTN/DM/CKD 값을 그대로 라벨로 쓰고(cutoff 도출 없음), internal OOF로 모델을
+# 학습/평가하고 external에는 고정 모델을 1회만 적용(freeze), AUC는 DeLong test(clinic4 vs 각 AEC-best
+# 모델)로 비교, 스캐너별 서브그룹 AUC도 함께 산출. AEC 조합은 질환마다, 그리고 arm(clinic4_aec_best/
+# clinic5_aec_best)마다 독립적으로 고른 최적 조합을 쓴다(select_best_shape_model_per_feature)
 def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, include_sex: bool) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -440,6 +497,9 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
 
     n_fpca, cum_var = select_best_fpca_n(aec_int_raw)
     save_cum_var_excel(cum_var, n_fpca, output_dir / "fpca_cumulative_variance.xlsx")
+
+    fpca_int_full, fpca_ext_full = fpca_scores(aec_int_raw, aec_ext_raw, n_fpca)
+    save_fpca_scores_excel(meta_int, meta_ext, fpca_int_full, fpca_ext_full, output_dir / "fpca_scores.xlsx")
 
     # internal/external 양쪽에서 최소 표본을 만족하는 feature만 골라내고, 조합 선택도 이 대상에만 수행한다
     valid_features: list[str] = []
@@ -463,35 +523,48 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
             continue
         valid_features.append(feat)
 
-    best_by_feature = select_best_shape_model_per_feature(
-        meta_int, aec_int_raw, aec_ext_raw, include_sex, valid_features, n_fpca)
+    # clinic4_aec_best/clinic5_aec_best는 각자의 baseline(VAT/SAT 비율 유무) 위에서 독립적으로 최적 AEC
+    # 조합을 고른다 - 같은 AEC 조합이 두 baseline 모두에 최적이라는 보장이 없으므로 따로 계산한다
+    best_by_feature_c4aec = select_best_shape_model_per_feature(
+        meta_int, aec_int_raw, aec_ext_raw, include_sex, valid_features, n_fpca, include_vat_sat_ratio=False)
+    best_by_feature_c5aec = select_best_shape_model_per_feature(
+        meta_int, aec_int_raw, aec_ext_raw, include_sex, valid_features, n_fpca, include_vat_sat_ratio=True)
 
-    # clinic4_aec_best의 internal OOF 확률(fold별 PCA refit)에 필요 - 조합이 aec_shape_all이면
+    # AEC-best 모델의 internal OOF 확률(fold별 PCA refit)에 필요 - 조합이 aec_shape_all이면
     # SD/Skew/상하위비율도 함께 결합해야 하므로 여기서 한 번 구해 둠(모든 질환에 공통, feature 무관)
     shape_int_for_best = shape_features(aec_int_raw)
     shape_int_stack = np.column_stack(
         [shape_int_for_best["sd"], shape_int_for_best["skew"], shape_int_for_best["upper_lower_ratio"]])
 
-    model_order = ["clinic4", "clinic4_aec_best"]
+    model_order = ["clinic4", "clinic4_aec_best", "clinic5_aec_best"]
     summary_rows = []
     delong_rows = []
     predictions_rows = []  # step4_clinic_aec_disease_scanner.py가 스캐너별 재슬라이싱에 쓸 환자별 예측확률
 
     for feat in valid_features:
         slug = FEATURES[feat]
-        best_name, aec_int_best, aec_ext_best = best_by_feature[feat]
-        best_fpca_kind = FPCA_CANDIDATE_KINDS.get(best_name)
+        best_name_c4, aec_int_best_c4, aec_ext_best_c4 = best_by_feature_c4aec[feat]
+        best_name_c5, aec_int_best_c5, aec_ext_best_c5 = best_by_feature_c5aec[feat]
+        best_name_by_model = {"clinic4_aec_best": best_name_c4, "clinic5_aec_best": best_name_c5}
+        best_fpca_kind_by_model = {m: FPCA_CANDIDATE_KINDS.get(n) for m, n in best_name_by_model.items()}
 
         aec_by_model = {
-            "clinic4": {"aec_int": None, "aec_ext": None},
-            "clinic4_aec_best": {"aec_int": aec_int_best, "aec_ext": aec_ext_best},
+            "clinic4": {"aec_int": None, "aec_ext": None, "include_vat_sat_ratio": False},
+            "clinic4_aec_best": {"aec_int": aec_int_best_c4, "aec_ext": aec_ext_best_c4,
+                                  "include_vat_sat_ratio": False},
+            "clinic5_aec_best": {"aec_int": aec_int_best_c5, "aec_ext": aec_ext_best_c5,
+                                  "include_vat_sat_ratio": True},
         }
         x_int_by_model: dict[str, np.ndarray] = {}
         x_ext_by_model: dict[str, np.ndarray] = {}
         for model_name in model_order:
             spec = aec_by_model[model_name]
-            x_int, clinic_scaler, aec_scaler = clinical_matrix(meta_int, spec["aec_int"], include_sex=include_sex)
-            x_ext, _, _ = clinical_matrix(meta_ext, spec["aec_ext"], clinic_scaler, aec_scaler, include_sex=include_sex)
+            x_int, clinic_scaler, aec_scaler = clinical_matrix(
+                meta_int, spec["aec_int"], include_sex=include_sex,
+                include_vat_sat_ratio=spec["include_vat_sat_ratio"])
+            x_ext, _, _ = clinical_matrix(
+                meta_ext, spec["aec_ext"], clinic_scaler, aec_scaler, include_sex=include_sex,
+                include_vat_sat_ratio=spec["include_vat_sat_ratio"])
             x_int_by_model[model_name], x_ext_by_model[model_name] = x_int, x_ext
 
         y_int_all = pd.to_numeric(meta_int[feat], errors="coerce").to_numpy(dtype=float)
@@ -515,14 +588,15 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
             x_int = x_int_by_model[model_name][mask_int]
             x_ext = x_ext_by_model[model_name][mask_ext]
 
-            fpca_kind = best_fpca_kind if model_name == "clinic4_aec_best" else None
+            fpca_kind = best_fpca_kind_by_model.get(model_name)
             if fpca_kind is None:
                 oof_proba = cross_val_predict(LogisticRegression(max_iter=2000), x_int, y_int,
                                                cv=cv, method="predict_proba")[:, 1]
             else:
                 shape_extra = shape_int_stack if fpca_kind == "shape_all" else None
                 oof_proba = _fpca_oof_proba_predict(meta_int, aec_int_raw, shape_extra, y_int_all, mask_int,
-                                                     n_fpca, include_sex, cv)
+                                                     n_fpca, include_sex, cv,
+                                                     aec_by_model[model_name]["include_vat_sat_ratio"])
             model = LogisticRegression(max_iter=2000).fit(x_int, y_int)
             ext_proba = model.predict_proba(x_ext)[:, 1]
 
@@ -539,8 +613,8 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
                      "auc": auc, "threshold": threshold, **cls_stats}
                 _log(feat, model_name, cohort, s)
                 row = {"feature": feat, "model": model_name, "cohort": cohort, **s}
-                if model_name == "clinic4_aec_best":
-                    row["aec_combo"] = best_name
+                if model_name in best_name_by_model:
+                    row["aec_combo"] = best_name_by_model[model_name]
                 summary_rows.append(row)
                 stats_by_model[model_name][cohort] = s
                 scores_by_model[model_name][cohort] = score
@@ -553,12 +627,15 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
                     "y": y, "score": score, "threshold": threshold,
                 }))
 
-            if model_name == "clinic4_aec_best":
-                input_cols_extra = [f"aec_best_{best_name}_{i}"
-                                     for i in range(x_int.shape[1] - (4 if include_sex else 3))]
+            include_ratio = aec_by_model[model_name]["include_vat_sat_ratio"]
+            n_clinical = (1 if include_sex else 0) + len(CLINICAL_BASE_COLS) + (1 if include_ratio else 0)
+            if model_name in best_name_by_model:
+                input_cols_extra = [f"aec_best_{best_name_by_model[model_name]}_{i}"
+                                     for i in range(x_int.shape[1] - n_clinical)]
             else:
                 input_cols_extra = []
-            input_cols = (["sex_M"] if include_sex else []) + ["age", "height", "weight"] + input_cols_extra
+            clinical_terms = ["age", "height", "weight"] + (["vat_sat_ratio"] if include_ratio else [])
+            input_cols = (["sex_M"] if include_sex else []) + clinical_terms + input_cols_extra
             coef_df = pd.DataFrame({
                 "term": input_cols + ["intercept"],
                 "coefficient": np.concatenate([model.coef_.ravel(), np.atleast_1d(model.intercept_)]),
@@ -567,7 +644,7 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
             coef_sheets[model_name] = coef_df.round(4)
 
         delong_by_model = {}
-        for model_name in ("clinic4_aec_best",):
+        for model_name in ("clinic4_aec_best", "clinic5_aec_best"):
             delong_int = delong_paired_auc_test(y_int, scores_by_model["clinic4"]["internal"],
                                                  scores_by_model[model_name]["internal"])
             delong_ext = delong_paired_auc_test(y_ext, scores_by_model["clinic4"]["external"],
@@ -586,8 +663,9 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
             "internal": {"y": y_int, **{m: scores_by_model[m]["internal"] for m in model_order}},
             "external": {"y": y_ext, **{m: scores_by_model[m]["external"] for m in model_order}},
         }
+        aec_label_by_model = {m: AEC_CANDIDATE_LABELS.get(n, n) for m, n in best_name_by_model.items()}
         plot_roc_dual(feat, model_order, curves, stats_by_model, delong_by_model,
-                      feat_dir / f"{slug}_roc_curve.png", AEC_CANDIDATE_LABELS.get(best_name, best_name))
+                      feat_dir / f"{slug}_roc_curve.png", aec_label_by_model)
 
     if skipped:
         pd.DataFrame(skipped).to_csv(output_dir / "skipped_features.csv", index=False)
@@ -609,11 +687,24 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path, includ
         plot_auc_summary(summary, model_order, output_dir / "logistic_regression_auc_summary.png")
 
 
+# AEC-best 두 arm(clinic4_aec_best/clinic5_aec_best) 각각의 delong_auc_comparison.csv 행(comparison_model로
+# 구분)에서 clinic4 대비 delta/AUC/p-value를 뽑아 "{colname}_{model_name}" 열로 만든다
+def _delong_slim_for_model(delong: pd.DataFrame, model_name: str, colname: str) -> pd.DataFrame:
+    d = delong[delong["comparison_model"] == model_name][["feature", "cohort", "auc_diff", "z", "p_value"]].copy()
+    # delong_paired_auc_test(y, score_a=clinic4, score_b=aec_best)의 diff/z는 auc_a-auc_b = clinic4-aec_best
+    # 부호이므로, "aec_best - clinic4"로 보여주려면 부호를 뒤집어야 함(안 뒤집으면 개선인데 음수로 표시되는 버그)
+    d[f"delta_auc_{colname}_minus_clinic4"] = -d["auc_diff"]
+    d[f"delong_z_{colname}"] = -d["z"]
+    d = d.rename(columns={"p_value": f"delong_p_{colname}"}).drop(columns=["auc_diff", "z"])
+    return d
+
+
 # 이 스크립트가 저장한 logistic_regression_summary.csv(AUC/CI)와 delong_auc_comparison.csv(clinic4 vs
-# clinic4_aec_best paired DeLong test)를 하나의 표로 합쳐 feature x cohort(internal/external)별
-# AUC_clinic4, AUC_aec_best, delta(AUC), DeLong p-value를 한눈에 보도록 정리한다. 질환마다 선택된 AEC
-# 조합이 다르므로(select_best_shape_model_per_feature) aec_combo 열도 함께 붙인다. step3 자신의
-# output만 읽으므로 이 스크립트 안에 둔다(같은 output dir=같은 py 원칙)
+# clinic4_aec_best/clinic5_aec_best paired DeLong test)를 하나의 표로 합쳐 feature x cohort(internal/
+# external)별 AUC_clinic4/AUC_clinic4_aec_best/AUC_clinic5_aec_best, 두 arm 각각의 delta(AUC), DeLong
+# p-value를 한눈에 보도록 정리한다(사용자 확인 2026-08-18: "clinic4 vs clinic4+AEC(best) vs clinic5+AEC(best)
+# 로 비교해"). 질환/arm마다 선택된 AEC 조합이 다르므로(select_best_shape_model_per_feature) aec_combo 열도
+# arm별로 붙인다. step3 자신의 output만 읽으므로 이 스크립트 안에 둔다(같은 output dir=같은 py 원칙)
 def build_auc_delta_scope_table(scope_dir: Path) -> pd.DataFrame:
     summary = pd.read_csv(scope_dir / "logistic_regression_summary.csv")
     delong = pd.read_csv(scope_dir / "delong_auc_comparison.csv")
@@ -622,21 +713,21 @@ def build_auc_delta_scope_table(scope_dir: Path) -> pd.DataFrame:
     pivot.columns = [f"auc_{model}" for model in pivot.columns]
     pivot = pivot.reset_index()
 
-    combo_map = (summary[summary["model"] == "clinic4_aec_best"]
-                 .drop_duplicates(subset=["feature"]).set_index("feature")["aec_combo"])
-    pivot["aec_combo"] = pivot["feature"].map(combo_map).map(lambda n: AEC_CANDIDATE_LABELS.get(n, n))
+    for model_name in ("clinic4_aec_best", "clinic5_aec_best"):
+        combo_map = (summary[summary["model"] == model_name]
+                     .drop_duplicates(subset=["feature"]).set_index("feature")["aec_combo"])
+        pivot[f"aec_combo_{model_name}"] = pivot["feature"].map(combo_map).map(
+            lambda n: AEC_CANDIDATE_LABELS.get(n, n))
 
-    # delong_paired_auc_test(y, score_a=clinic4, score_b=aec_best)의 diff/z는 auc_a-auc_b = clinic4-aec_best
-    # 부호이므로, "aec_best - clinic4"로 보여주려면 부호를 뒤집어야 함(안 뒤집으면 개선인데 음수로 표시되는 버그)
-    delong_slim = delong[["feature", "cohort", "auc_diff", "z", "p_value"]].rename(
-        columns={"p_value": "delong_p_value"})
-    delong_slim["delta_auc_aec_best_minus_clinic4"] = -delong_slim["auc_diff"]
-    delong_slim["delong_z"] = -delong_slim["z"]
-    delong_slim = delong_slim.drop(columns=["auc_diff", "z"])
+    merged = pivot
+    for model_name in ("clinic4_aec_best", "clinic5_aec_best"):
+        merged = merged.merge(_delong_slim_for_model(delong, model_name, model_name),
+                               on=["feature", "cohort"], how="left")
 
-    merged = pivot.merge(delong_slim, on=["feature", "cohort"], how="left")
-    cols = ["feature", "cohort", "aec_combo", "auc_clinic4", "auc_clinic4_aec_best",
-            "delta_auc_aec_best_minus_clinic4", "delong_z", "delong_p_value"]
+    cols = ["feature", "cohort", "aec_combo_clinic4_aec_best", "aec_combo_clinic5_aec_best",
+            "auc_clinic4", "auc_clinic4_aec_best", "auc_clinic5_aec_best",
+            "delta_auc_clinic4_aec_best_minus_clinic4", "delong_p_clinic4_aec_best",
+            "delta_auc_clinic5_aec_best_minus_clinic4", "delong_p_clinic5_aec_best"]
 
     result = merged[cols].round(4)
     feature_order = list(FEATURES.keys())
@@ -656,29 +747,37 @@ def plot_auc_delta_combined_table(table: pd.DataFrame, out_path: Path) -> None:
     table = table.sort_values(["cohort", "feature"]).reset_index(drop=True)
     rows = []
     for _, r in table.iterrows():
-        p = r["delong_p_value"]
-        p_str = "<0.001" if p < 0.001 else f"{p:.3f}"
+        p_c4 = r["delong_p_clinic4_aec_best"]
+        p_c5 = r["delong_p_clinic5_aec_best"]
+        p_c4_str = "<0.001" if p_c4 < 0.001 else f"{p_c4:.3f}"
+        p_c5_str = "<0.001" if p_c5 < 0.001 else f"{p_c5:.3f}"
         rows.append([
             r["cohort"],
             slugs[r["feature"]],
-            r["aec_combo"],
+            r["aec_combo_clinic4_aec_best"],
+            r["aec_combo_clinic5_aec_best"],
             f"{r['auc_clinic4']:.3f}",
             f"{r['auc_clinic4_aec_best']:.3f}",
-            f"{r['delta_auc_aec_best_minus_clinic4']:+.3f}",
-            p_str,
+            f"{r['auc_clinic5_aec_best']:.3f}",
+            f"{r['delta_auc_clinic4_aec_best_minus_clinic4']:+.3f}",
+            p_c4_str,
+            f"{r['delta_auc_clinic5_aec_best_minus_clinic4']:+.3f}",
+            p_c5_str,
         ])
-    col_labels = ["Cohort", "Feature", "AEC 조합(질환별 최적)", "AUC clinic4", "AUC clinic4+AEC(best)",
-                  "ΔAUC (AEC-clinic4)", "DeLong p"]
-    col_widths = [0.10, 0.12, 0.20, 0.14, 0.20, 0.13, 0.10]
-    delta_col = 5
+    col_labels = ["Cohort", "Feature", "AEC 조합\n(clinic4+AEC)", "AEC 조합\n(clinic5+AEC)",
+                  "AUC\nclinic4", "AUC\nclinic4+AEC", "AUC\nclinic5+AEC",
+                  "ΔAUC\n(clinic4+AEC-clinic4)", "DeLong p\n(clinic4+AEC)",
+                  "ΔAUC\n(clinic5+AEC-clinic4)", "DeLong p\n(clinic5+AEC)"]
+    col_widths = [0.07, 0.07, 0.12, 0.12, 0.08, 0.09, 0.09, 0.11, 0.09, 0.11, 0.09]
+    delta_col_c4aec, delta_col_c5aec = 7, 9
 
     n_rows = len(rows)
-    fig, ax = plt.subplots(figsize=(30, 1.2 + 0.9 * n_rows))
+    fig, ax = plt.subplots(figsize=(36, 1.4 + 0.9 * n_rows))
     ax.axis("off")
     tbl = ax.table(cellText=rows, colLabels=col_labels, colWidths=col_widths, loc="center", cellLoc="center")
     tbl.auto_set_font_size(False)
-    tbl.set_fontsize(24)
-    tbl.scale(1, 3.2)
+    tbl.set_fontsize(20)
+    tbl.scale(1, 3.6)
 
     # 코호트가 바뀌는 첫 행(row_i)을 기록해두고, 그 행의 "위쪽"에만 굵은 구분선을 별도로 그린다.
     # 유의성 강조는 delta 컬럼 텍스트 색상(빨강/파랑)만으로 표시하고, 테두리·배경은 전부
@@ -688,20 +787,25 @@ def plot_auc_delta_combined_table(table: pd.DataFrame, out_path: Path) -> None:
     for (row_i, col_i), cell in tbl.get_celld().items():
         if row_i == 0:
             cell.set_edgecolor("#cfcdc7")
-            cell.set_text_props(weight="bold", color="white", fontsize=26)
+            cell.set_text_props(weight="bold", color="white", fontsize=18)
             cell.set_facecolor("#161616")
             continue
-        sig = table.iloc[row_i - 1]["delong_p_value"] < 0.05
+        r = table.iloc[row_i - 1]
         cell.set_edgecolor("#cfcdc7")
         cell.set_linewidth(1.0)
         cell.set_facecolor("white")
         if block_start[row_i - 1] and row_i > 1:
             divider_row_i = row_i
-        if col_i == delta_col:
-            delta = table.iloc[row_i - 1]["delta_auc_aec_best_minus_clinic4"]
+        if col_i == delta_col_c4aec:
+            delta = r["delta_auc_clinic4_aec_best_minus_clinic4"]
+            sig = r["delong_p_clinic4_aec_best"] < 0.05
+            cell.set_text_props(color="#0055bd" if delta < 0 else "#d30909", weight="bold" if sig else "normal")
+        elif col_i == delta_col_c5aec:
+            delta = r["delta_auc_clinic5_aec_best_minus_clinic4"]
+            sig = r["delong_p_clinic5_aec_best"] < 0.05
             cell.set_text_props(color="#0055bd" if delta < 0 else "#d30909", weight="bold" if sig else "normal")
 
-    ax.set_title("clinic4 vs clinic4+AEC(best) AUC 비교 (internal vs external)", fontsize=30,
+    ax.set_title("clinic4 vs clinic4+AEC(best) vs clinic5+AEC(best) AUC 비교 (internal vs external)", fontsize=26,
                  fontweight="bold", color="#161616", pad=10)
     fig.tight_layout()
 
@@ -746,10 +850,8 @@ def run_auc_delta_table() -> None:
 def main() -> None:
     meta_int, meta_ext = load_cohort(INTERNAL_XLSX), load_cohort(EXTERNAL_XLSX)
 
-    clinical_cols = ["PatientAge", "Height", "Weight"]
-
     def valid_rows(meta: pd.DataFrame) -> np.ndarray:
-        vals = meta[clinical_cols].apply(pd.to_numeric, errors="coerce")
+        vals = meta[ALL_CLINICAL_COLS].apply(pd.to_numeric, errors="coerce")
         mask = vals.notna().all(axis=1).to_numpy()
         valid_sex = meta["PatientSex"].astype(str).str.upper().isin(["M", "F"]).to_numpy()
         return mask & valid_sex
