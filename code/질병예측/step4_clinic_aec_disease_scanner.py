@@ -20,7 +20,7 @@ from sklearn.metrics import confusion_matrix, roc_auc_score
 plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STEP3_DIR = PROJECT_ROOT / "outputs" / "step3_disease_logistic"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "step4_disease_scanner_subgroup"
 SCANNER_MIN_N = 30  # 스캐너별 서브그룹 분석에서 이 인원 미만인 스캐너는 제외

@@ -17,7 +17,7 @@ from scipy import stats
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔 기본 cp949가 ±/–(en dash) 등을 인코딩 못 해 print에서 죽는 것 방지
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "table"
 
