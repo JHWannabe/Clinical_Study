@@ -1,7 +1,0 @@
-feature,cohort,aec_combo_clinic4_aec_best,aec_combo_clinic5_aec_best,auc_clinic4,auc_clinic4_aec_best,auc_clinic5_aec_best,delta_auc_clinic4_aec_best_minus_clinic4,delong_p_clinic4_aec_best,delta_auc_clinic5_aec_best_minus_clinic4,delong_p_clinic5_aec_best
-HTN,internal,FPCA,FPCA,0.8065,0.8176,0.8179,0.0112,0.0267,0.0115,0.0295
-HTN,external,FPCA,FPCA,0.7135,0.731,0.7367,0.0175,0.0035,0.0232,0.0004
-DM,internal,FPCA,FPCA,0.7296,0.7509,0.7497,0.0214,0.0282,0.0202,0.0411
-DM,external,FPCA,FPCA,0.6625,0.7014,0.7032,0.0389,0.0001,0.0407,0.0001
-CKD,internal,전체결합: SD·Skew·상하위비율·FPCA,전체결합: SD·Skew·상하위비율·FPCA,0.7935,0.8129,0.8212,0.0194,0.1661,0.0277,0.0903
-CKD,external,전체결합: SD·Skew·상하위비율·FPCA,전체결합: SD·Skew·상하위비율·FPCA,0.6214,0.6414,0.6351,0.02,0.0342,0.0138,0.2343

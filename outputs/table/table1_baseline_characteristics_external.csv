@@ -1,0 +1,14 @@
+﻿Characteristic,Men,Women,p-value
+"Age, years, mean ± SD",61.3 ± 12.7,58.1 ± 12.4,<0.001
+"Age, years, range",20–85,24–90,
+"Height, cm, mean ± SD",169.1 ± 6.3,156.9 ± 5.8,<0.001
+"Weight, kg, mean ± SD",68.0 ± 10.4,56.5 ± 9.3,<0.001
+"BMI, kg/m², mean ± SD",23.7 ± 3.1,23.0 ± 3.6,<0.001
+"Hypertension, n (%)",217 (50.8%),208 (41.8%),0.007
+"Diabetes mellitus, n (%)",143 (33.5%),142 (28.5%),0.118
+"Chronic kidney disease, n (%)",97 (22.7%),71 (14.3%),0.001
+"CT scanner vendor, n (%)",,,0.015
+— Siemens,285 (66.7%),283 (56.8%),
+— GE,88 (20.6%),131 (26.3%),
+— Philips,52 (12.2%),83 (16.7%),
+— Canon,2 (0.5%),1 (0.2%),
