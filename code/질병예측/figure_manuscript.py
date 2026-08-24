@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from PIL import Image
 from sklearn.decomposition import PCA
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔 기본 cp949가 μ/φ/₁ 등을 인코딩 못 해 print에서 죽는 것 방지
@@ -61,7 +62,20 @@ def compute_flow(raw: pd.DataFrame) -> dict:
     return {"n_enroll": n_enroll, "n_age_excluded": n_enroll - len(after_age), "n_final": len(after_age)}
 
 
-def box(ax, renderer, cx, cy, w, h, text, facecolor, fontsize=13.5, fontweight="normal", min_fontsize=8.0):
+# bbox_inches="tight" 저장 결과는 실제 그려진 픽셀(텍스트/박스)의 좌우 비대칭 여백을 그대로 남긴다.
+# 저장 후 non-white 컨텐츠 bbox를 찾아 좌우/상하 여백이 동일하도록 다시 잘라 중앙 정렬한다.
+def center_pad_png(path: Path, pad_px: int = 40) -> None:
+    im = Image.open(path).convert("RGB")
+    arr = np.array(im.convert("L"))
+    mask = arr < 250
+    rows, cols = np.where(mask.any(axis=1))[0], np.where(mask.any(axis=0))[0]
+    cropped = im.crop((int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1))
+    canvas = Image.new("RGB", (cropped.width + 2 * pad_px, cropped.height + 2 * pad_px), "white")
+    canvas.paste(cropped, (pad_px, pad_px))
+    canvas.save(path)
+
+
+def box(ax, renderer, cx, cy, w, h, text, facecolor, fontsize=24.0, fontweight="normal", min_fontsize=16.0):
     ax.add_patch(FancyBboxPatch((cx - w / 2, cy - h / 2), w, h, boxstyle="round,pad=0.02,rounding_size=0.08",
                                  facecolor=facecolor, edgecolor=BORDER, linewidth=1.6, zorder=2))
     txt = ax.text(cx, cy, text, ha="center", va="center", fontweight=fontweight, zorder=3, linespacing=1.4)
@@ -86,17 +100,17 @@ def arrow(ax, xy_from, xy_to, lw=1.6):
 
 
 # 한 코호트 열(Enrollment -> 배제박스(연령<20) -> 최종 Inclusion box) — 스캐너 배제 단계 없음
-def draw_column(ax, renderer, cx_main, cx_excl, flow: dict, cohort_label: str, site: str, main_w=4.4, excl_w=3.6):
-    y_enroll, h_enroll = 8.6, 1.7
-    y_excl, h_excl = 6.2, 1.15
-    y_final, h_final = 3.6, 1.4
+def draw_column(ax, renderer, cx_main, cx_excl, flow: dict, cohort_label: str, site: str, main_w=7.0, excl_w=4.8):
+    y_enroll, h_enroll = 8.6, 2.3
+    y_excl, h_excl = 6.2, 1.6
+    y_final, h_final = 3.6, 2.0
 
     box(ax, renderer, cx_main, y_enroll, main_w, h_enroll,
         f"{flow['n_enroll']:,} patients\nfrom {site}\n({cohort_label})", STATE_WHITE, fontweight="bold")
 
     arrow(ax, (cx_main, y_enroll - h_enroll / 2), (cx_main, y_final + h_final / 2 + 0.05))
     box(ax, renderer, cx_excl, y_excl, excl_w, h_excl,
-        f"{flow['n_age_excluded']} excluded\nAge <{AGE_CUTOFF} years", STATE_WHITE, fontsize=11)
+        f"{flow['n_age_excluded']} excluded\nAge <{AGE_CUTOFF} years", STATE_WHITE, fontsize=20)
     arrow(ax, (cx_main + 0.08, y_excl), (cx_excl - excl_w / 2 - 0.08, y_excl), lw=1.2)
 
     box(ax, renderer, cx_main, y_final, main_w, h_final,
@@ -104,8 +118,8 @@ def draw_column(ax, renderer, cx_main, cx_excl, flow: dict, cohort_label: str, s
 
 
 def plot_diagram(flow_internal: dict, flow_external: dict, out_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(17, 8.5))
-    xlim, ylim = (-2.7, 18.9), (2.2, 11.1)
+    fig, ax = plt.subplots(figsize=(20, 9.5))
+    xlim, ylim = (-0.5, 26.0), (1.7, 11.3)
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     ax.axis("off")
@@ -113,21 +127,21 @@ def plot_diagram(flow_internal: dict, flow_external: dict, out_path: Path) -> No
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
 
-    cx_internal_main, cx_internal_excl = 3.0, 7.7
-    cx_external_main, cx_external_excl = 12.3, 17.0
+    cx_internal_main, cx_internal_excl = 3.7, 9.9
+    cx_external_main, cx_external_excl = 16.3, 22.5
 
     draw_column(ax, renderer, cx_internal_main, cx_internal_excl, flow_internal, "internal cohort", INTERNAL_SITE)
     draw_column(ax, renderer, cx_external_main, cx_external_excl, flow_external, "external cohort", EXTERNAL_SITE)
 
     ax.text((cx_internal_main + cx_external_main) / 2, 10.65,
-             "Both cohorts: CT examinations Jan 2018–Jun 2020 (internal) / 2019 (external); clinical data +\n"
-             "abdominal CT at 100 kVp available for the same patient. No CT scanner-model restriction applied\n"
-             "(all vendors/models retained); every CT examination in the source dataset was acquired at 100 kVp,\n"
+             "Both cohorts: CT examinations Jan 2018–Jun 2020 (internal) / 2019 (external); clinical data + abdominal CT at 100 kVp available for the same patient.\n"
+             "No CT scanner-model restriction applied (all vendors/models retained); every CT examination in the source dataset was acquired at 100 kVp,\n"
              "so a tube-voltage restriction could not be relaxed within the available data.",
-             ha="center", va="center", fontsize=10, style="italic", color="#3a3a3a")
+             ha="center", va="center", fontsize=18, style="italic", color="#3a3a3a")
 
     fig.savefig(out_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+    center_pad_png(out_path)
     print(f"Saved patient selection flow diagram to {out_path}")
 
 
@@ -278,7 +292,7 @@ def plot_panel_c_scree_elbow(scree: pd.Series, elbow_n: int, out_path: Path) -> 
     ax.set_xlabel("component index", fontsize=26)
     ax.set_ylabel("individual explained variance ratio", fontsize=26)
     ax.tick_params(labelsize=18)
-    ax.legend(fontsize=20, loc="upper right")
+    ax.legend(fontsize=15, loc="upper right", bbox_to_anchor=(1.0, 1.02), frameon=True)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -347,68 +361,70 @@ def plot_figure1_combined(aec_raw: np.ndarray, mean_curve: np.ndarray, cov_matri
     rng = np.random.default_rng(SEED)
     sample_idx = rng.choice(aec_raw.shape[0], size=min(N_SAMPLE_CURVES, aec_raw.shape[0]), replace=False)
 
-    fig = plt.figure(figsize=(24, 15))
-    gs = fig.add_gridspec(2, 3, hspace=0.4, wspace=0.35)
+    fig = plt.figure(figsize=(19, 26))
+    gs = fig.add_gridspec(3, 2, hspace=0.7, wspace=0.4)
 
     ax = fig.add_subplot(gs[0, 0])
     for i in sample_idx:
         ax.plot(x_axis, aec_raw[i], color="#c9c7c1", linewidth=1, alpha=0.6)
     ax.plot(x_axis, mean_curve, color="#161616", linewidth=3, label="mean curve μ(z)")
-    ax.set_title("(A) Sample curves and mean curve", fontsize=20, fontweight="bold")
-    ax.set_xlabel("AEC slice position z", fontsize=15)
-    ax.set_ylabel("AEC value", fontsize=15)
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=13, loc="best")
+    ax.set_title("(A) Sample curves and mean curve", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("AEC slice position z", fontsize=26)
+    ax.set_ylabel("AEC value", fontsize=26)
+    ax.tick_params(labelsize=21)
+    ax.legend(fontsize=22, loc="best")
     ax.grid(alpha=0.3)
 
     ax = fig.add_subplot(gs[0, 1])
     ax2 = ax.twinx()
     ax.plot(x_axis, d_rep, color="#2a78d6", linewidth=2.5, label="d_i(z)")
     ax2.plot(x_axis, pca3.components_[0], color="#e2622e", linewidth=2.5, linestyle="--", label="φ1(z)")
-    ax.set_title("(B) Deviation curve, projected onto φ1 → score", fontsize=18, fontweight="bold")
-    ax.set_xlabel("AEC slice position z", fontsize=15)
-    ax.set_ylabel("d_i(z) = x_i(z) - μ(z)", fontsize=15, color="#2a78d6")
-    ax2.set_ylabel("φ1(z)", fontsize=15, color="#e2622e")
-    ax.tick_params(labelsize=12)
-    ax2.tick_params(labelsize=12)
-    ax.text(0.03, 0.05, f"score_i,1 = Σ d_i(z)·φ1(z)\n= {score1:,.1f}", transform=ax.transAxes, fontsize=14,
+    ax.set_title("(B) Deviation curve, projected onto φ1 → score", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("AEC slice position z", fontsize=26)
+    ax.set_ylabel("d_i(z) = x_i(z) - μ(z)", fontsize=26, color="#2a78d6")
+    ax2.set_ylabel("φ1(z)", fontsize=26, color="#e2622e")
+    ax.tick_params(labelsize=21)
+    ax2.tick_params(labelsize=21)
+    ax.text(0.03, 0.05, f"score_i,1 = Σ d_i(z)·φ1(z)\n= {score1:,.1f}", transform=ax.transAxes, fontsize=24,
              va="bottom", ha="left", bbox={"boxstyle": "round", "facecolor": "white", "edgecolor": "#161616"})
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=12, loc="upper right")
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=21, loc="upper right")
     ax.grid(alpha=0.3)
 
-    ax = fig.add_subplot(gs[0, 2])
+    ax = fig.add_subplot(gs[1, 0])
     ax.plot(scree.index, scree.values, marker="o", markersize=7, linewidth=2.5, color="#161616",
             label="individual explained variance ratio")
     ax.plot([scree.index[0], scree.index[-1]], [scree.values[0], scree.values[-1]], color="#898781",
             linestyle=":", linewidth=2, label="first-to-last point line (chord)")
     ax.axvline(elbow_n, color="#e2622e", linestyle="--", linewidth=2.5, label=f"elbow k={elbow_n}")
     ax.set_xticks(list(scree.index))
-    ax.set_title("(C) Scree plot / elbow", fontsize=20, fontweight="bold")
-    ax.set_xlabel("component index", fontsize=15)
-    ax.set_ylabel("individual explained variance ratio", fontsize=15)
-    ax.tick_params(labelsize=11)
-    ax.legend(fontsize=11, loc="upper right")
+    ax.set_title("(C) Scree plot / elbow", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("component index", fontsize=26)
+    ax.set_ylabel("individual explained variance ratio", fontsize=26)
+    ax.tick_params(labelsize=20)
+    ax.legend(fontsize=13, loc="upper right", bbox_to_anchor=(1.0, 1.02), frameon=True)
     ax.grid(alpha=0.3)
 
-    ax = fig.add_subplot(gs[1, 0])
-    im = ax.imshow(cov_matrix, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
-    ax.set_title("(D) Covariance matrix (original)", fontsize=20, fontweight="bold")
-    ax.set_xlabel("z", fontsize=15)
-    ax.set_ylabel("z", fontsize=15)
-    ax.tick_params(labelsize=12)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
     ax = fig.add_subplot(gs[1, 1])
-    im = ax.imshow(cov_rank3, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
-    ax.set_title(f"(E) Covariance matrix (rank-{FPCA_N_FIXED} approximation)", fontsize=20, fontweight="bold")
-    ax.set_xlabel("z", fontsize=15)
-    ax.set_ylabel("z", fontsize=15)
-    ax.tick_params(labelsize=12)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    im = ax.imshow(cov_matrix, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
+    ax.set_title("(D) Covariance matrix (original)", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("z", fontsize=26)
+    ax.set_ylabel("z", fontsize=26)
+    ax.tick_params(labelsize=21)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(labelsize=19)
 
-    ax = fig.add_subplot(gs[1, 2])
+    ax = fig.add_subplot(gs[2, 0])
+    im = ax.imshow(cov_rank3, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
+    ax.set_title(f"(E) Covariance matrix (rank-{FPCA_N_FIXED} approx.)", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("z", fontsize=26)
+    ax.set_ylabel("z", fontsize=26)
+    ax.tick_params(labelsize=21)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(labelsize=19)
+
+    ax = fig.add_subplot(gs[2, 1])
     colors = ["#2a78d6", "#e2622e", "#1baf7a"]
     for k in range(FPCA_N_FIXED):
         scale = np.sqrt(pca3.explained_variance_[k])
@@ -418,11 +434,11 @@ def plot_figure1_combined(aec_raw: np.ndarray, mean_curve: np.ndarray, cov_matri
                  label=f"φ{k + 1} ({pca3.explained_variance_ratio_[k] * 100:.1f}%)")
         ax.plot(x_axis, lower, color=colors[k], linewidth=2)
     ax.plot(x_axis, mean_curve, color="#161616", linewidth=2.5, linestyle=":", label="mean curve μ(z)")
-    ax.set_title("(F) Eigenfunctions φ1-φ3 (μ(z) ± √λ_k·φ_k(z))", fontsize=18, fontweight="bold")
-    ax.set_xlabel("AEC slice position z", fontsize=15)
-    ax.set_ylabel("AEC value", fontsize=15)
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=11, loc="best")
+    ax.set_title("(F) Eigenfunctions φ1-φ3 (μ(z) ± √λ_k·φ_k(z))", fontsize=24, fontweight="bold", pad=20)
+    ax.set_xlabel("AEC slice position z", fontsize=26)
+    ax.set_ylabel("AEC value", fontsize=26)
+    ax.tick_params(labelsize=21)
+    ax.legend(fontsize=20, loc="best")
     ax.grid(alpha=0.3)
 
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
