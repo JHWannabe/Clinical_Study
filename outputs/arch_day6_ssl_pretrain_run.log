@@ -1,0 +1,42 @@
+[환경] torch=2.11.0+cu128 device=cuda fusion=ssl_pretrain
+[baseline/HTN] clinic4 internal OOF AUC=0.7953
+[ssl_pretrain/HTN stage1 1/4] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.7672 (delta=-0.0281)
+[ssl_pretrain/HTN stage1 2/4] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.7941 (delta=-0.0012)
+[ssl_pretrain/HTN stage1 3/4] {'pretrain_epochs': 30, 'head_hidden': 16} internal_OOF_AUC=0.7740 (delta=-0.0213)
+[ssl_pretrain/HTN stage1 4/4] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7956 (delta=+0.0003)
+[ssl_pretrain/HTN stage2-refine] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7985 (delta=+0.0032)
+[ssl_pretrain/HTN stage2-refine] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.8006 (delta=+0.0053)
+[ssl_pretrain/HTN stage2-refine] {'pretrain_epochs': 30, 'head_hidden': 16} internal_OOF_AUC=0.7993 (delta=+0.0040)
+[ssl_pretrain/HTN 선택] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.8006 (delta=+0.0053)
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day6_ssl_pretrain\loss_curve_HTN.png
+[ssl_pretrain/HTN external] clinic4 AUC=0.7177 / ssl_pretrain AUC=0.7239
+[ssl_pretrain vs clinic4 / HTN / internal] delta_auc=+0.0053 p=0.3040
+[ssl_pretrain vs clinic4 / HTN / external] delta_auc=+0.0063 p=0.1839
+[baseline/DM] clinic4 internal OOF AUC=0.7186
+[ssl_pretrain/DM stage1 1/4] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.6990 (delta=-0.0196)
+[ssl_pretrain/DM stage1 2/4] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.7025 (delta=-0.0160)
+[ssl_pretrain/DM stage1 3/4] {'pretrain_epochs': 30, 'head_hidden': 16} internal_OOF_AUC=0.6953 (delta=-0.0232)
+[ssl_pretrain/DM stage1 4/4] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7287 (delta=+0.0101)
+[ssl_pretrain/DM stage2-refine] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7134 (delta=-0.0052)
+[ssl_pretrain/DM stage2-refine] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.7093 (delta=-0.0093)
+[ssl_pretrain/DM stage2-refine] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.7076 (delta=-0.0110)
+[ssl_pretrain/DM 선택] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7134 (delta=-0.0052)
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day6_ssl_pretrain\loss_curve_DM.png
+[ssl_pretrain/DM external] clinic4 AUC=0.6655 / ssl_pretrain AUC=0.6718
+[ssl_pretrain vs clinic4 / DM / internal] delta_auc=-0.0052 p=0.5929
+[ssl_pretrain vs clinic4 / DM / external] delta_auc=+0.0063 p=0.4907
+[baseline/CKD] clinic4 internal OOF AUC=0.7661
+[ssl_pretrain/CKD stage1 1/4] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.7604 (delta=-0.0057)
+[ssl_pretrain/CKD stage1 2/4] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.7355 (delta=-0.0305)
+[ssl_pretrain/CKD stage1 3/4] {'pretrain_epochs': 30, 'head_hidden': 16} internal_OOF_AUC=0.7530 (delta=-0.0131)
+[ssl_pretrain/CKD stage1 4/4] {'pretrain_epochs': 30, 'head_hidden': 32} internal_OOF_AUC=0.7198 (delta=-0.0463)
+[ssl_pretrain/CKD stage2-refine] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.7606 (delta=-0.0055)
+[ssl_pretrain/CKD stage2-refine] {'pretrain_epochs': 30, 'head_hidden': 16} internal_OOF_AUC=0.7532 (delta=-0.0128)
+[ssl_pretrain/CKD stage2-refine] {'pretrain_epochs': 15, 'head_hidden': 32} internal_OOF_AUC=0.7577 (delta=-0.0083)
+[ssl_pretrain/CKD 선택] {'pretrain_epochs': 15, 'head_hidden': 16} internal_OOF_AUC=0.7606 (delta=-0.0055)
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day6_ssl_pretrain\loss_curve_CKD.png
+[ssl_pretrain/CKD external] clinic4 AUC=0.6156 / ssl_pretrain AUC=0.6193
+[ssl_pretrain vs clinic4 / CKD / internal] delta_auc=-0.0055 p=0.7104
+[ssl_pretrain vs clinic4 / CKD / external] delta_auc=+0.0037 p=0.5382
+Saved comparison plot to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day6_ssl_pretrain\classification_auc_comparison.png
+[ssl_pretrain] 결과 저장 완료: C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day6_ssl_pretrain

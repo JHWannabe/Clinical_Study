@@ -1,0 +1,56 @@
+[환경] torch=2.11.0+cu128 device=cuda fusion=tcn features=['HTN', 'DM', 'CKD']
+internal n=1259, external n=1123
+[tcn] fusion-specific grid: 8개 조합 (backbone={'curve_prep': 'patient_zscore', 'channels': (128, 256, 128), 'kernel_sizes': (11, 9, 7), 'dropout': 0.6, 'embed_dim': 8, 'augment_std': 0.05, 'lr': 0.003, 'weight_decay': 0.001, 'batch_size': 64} 고정)
+[baseline/HTN] clinic4 internal OOF AUC=0.7953
+[tcn/HTN stage1 1/8] {'n_levels': 3, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.7628 (delta=-0.0325)
+[tcn/HTN stage1 2/8] {'n_levels': 3, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7927 (delta=-0.0026)
+[tcn/HTN stage1 3/8] {'n_levels': 3, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7875 (delta=-0.0078)
+[tcn/HTN stage1 4/8] {'n_levels': 3, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7736 (delta=-0.0217)
+[tcn/HTN stage1 5/8] {'n_levels': 4, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.7840 (delta=-0.0113)
+[tcn/HTN stage1 6/8] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7944 (delta=-0.0009)
+[tcn/HTN stage1 7/8] {'n_levels': 4, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7699 (delta=-0.0254)
+[tcn/HTN stage1 8/8] {'n_levels': 4, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7888 (delta=-0.0065)
+[tcn/HTN stage2-refine] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7947 (delta=-0.0006, ensemble=3)
+[tcn/HTN stage2-refine] {'n_levels': 3, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7938 (delta=-0.0015, ensemble=3)
+[tcn/HTN stage2-refine] {'n_levels': 4, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7941 (delta=-0.0012, ensemble=3)
+[tcn/HTN 선택] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7947 (delta=-0.0006 vs clinic4)
+[tcn/HTN external, 1회 동결평가] clinic4 AUC=0.7177 95%CI=[0.6874, 0.7489] / tcn AUC=0.7280 95%CI=[0.6991, 0.7588]
+[tcn vs clinic4 / HTN / internal] delta_auc=-0.0006 z=-0.1851 p=0.8531
+[tcn vs clinic4 / HTN / external] delta_auc=+0.0103 z=3.4476 p=0.0006
+[baseline/DM] clinic4 internal OOF AUC=0.7186
+[tcn/DM stage1 1/8] {'n_levels': 3, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.6873 (delta=-0.0313)
+[tcn/DM stage1 2/8] {'n_levels': 3, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7117 (delta=-0.0068)
+[tcn/DM stage1 3/8] {'n_levels': 3, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7139 (delta=-0.0047)
+[tcn/DM stage1 4/8] {'n_levels': 3, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.6858 (delta=-0.0327)
+[tcn/DM stage1 5/8] {'n_levels': 4, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.7101 (delta=-0.0085)
+[tcn/DM stage1 6/8] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7222 (delta=+0.0037)
+[tcn/DM stage1 7/8] {'n_levels': 4, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7177 (delta=-0.0009)
+[tcn/DM stage1 8/8] {'n_levels': 4, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.6733 (delta=-0.0453)
+[tcn/DM stage2-refine] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7238 (delta=+0.0052, ensemble=3)
+[tcn/DM stage2-refine] {'n_levels': 4, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7117 (delta=-0.0069, ensemble=3)
+[tcn/DM stage2-refine] {'n_levels': 3, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7112 (delta=-0.0073, ensemble=3)
+[tcn/DM 선택] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7238 (delta=+0.0052 vs clinic4)
+[tcn/DM external, 1회 동결평가] clinic4 AUC=0.6655 95%CI=[0.6324, 0.6991] / tcn AUC=0.6629 95%CI=[0.6293, 0.6970]
+[tcn vs clinic4 / DM / internal] delta_auc=+0.0052 z=1.0098 p=0.3126
+[tcn vs clinic4 / DM / external] delta_auc=-0.0025 z=-0.3446 p=0.7304
+[baseline/CKD] clinic4 internal OOF AUC=0.7661
+[tcn/CKD stage1 1/8] {'n_levels': 3, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.7388 (delta=-0.0273)
+[tcn/CKD stage1 2/8] {'n_levels': 3, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7631 (delta=-0.0030)
+[tcn/CKD stage1 3/8] {'n_levels': 3, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7425 (delta=-0.0236)
+[tcn/CKD stage1 4/8] {'n_levels': 3, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7546 (delta=-0.0115)
+[tcn/CKD stage1 5/8] {'n_levels': 4, 'width': 16, 'kernel_size': 3} internal_OOF_AUC=0.7242 (delta=-0.0419)
+[tcn/CKD stage1 6/8] {'n_levels': 4, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7323 (delta=-0.0338)
+[tcn/CKD stage1 7/8] {'n_levels': 4, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7472 (delta=-0.0189)
+[tcn/CKD stage1 8/8] {'n_levels': 4, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7201 (delta=-0.0460)
+[tcn/CKD stage2-refine] {'n_levels': 3, 'width': 16, 'kernel_size': 5} internal_OOF_AUC=0.7571 (delta=-0.0090, ensemble=3)
+[tcn/CKD stage2-refine] {'n_levels': 3, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7734 (delta=+0.0074, ensemble=3)
+[tcn/CKD stage2-refine] {'n_levels': 4, 'width': 32, 'kernel_size': 3} internal_OOF_AUC=0.7591 (delta=-0.0070, ensemble=3)
+[tcn/CKD 선택] {'n_levels': 3, 'width': 32, 'kernel_size': 5} internal_OOF_AUC=0.7734 (delta=+0.0074 vs clinic4)
+[tcn/CKD external, 1회 동결평가] clinic4 AUC=0.6156 95%CI=[0.5713, 0.6618] / tcn AUC=0.6097 95%CI=[0.5638, 0.6565]
+[tcn vs clinic4 / CKD / internal] delta_auc=+0.0074 z=0.9703 p=0.3319
+[tcn vs clinic4 / CKD / external] delta_auc=-0.0059 z=-1.0344 p=0.3009
+Saved stage1/stage2 search to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day3_tcn
+Saved classification summary to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day3_tcn\classification_summary.csv
+Saved DeLong comparison to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day3_tcn\delong_vs_clinic4.csv
+Saved comparison plot to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day3_tcn\classification_auc_comparison.png
+[tcn] 결과 저장 완료: C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch_day3_tcn
