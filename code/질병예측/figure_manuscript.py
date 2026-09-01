@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-# 논문에 들어가는 두 Figure(Figure 1: 코호트 선정 흐름도 / Figure 2: FPCA 계산 과정)를 만들던
-# figure1_patient_selection_flow.py와 figure1_fpca_computation.py를 하나로 합친 파일(사용자 요청
-# 2026-08-24: "두 파일을 합쳐줘"). 두 스크립트 모두 outputs/figure에 결과를 저장하는 논문용 Figure
-# 생성 스크립트라 파일을 분리해 둘 이유가 없었다. 코드 내용은 각 원본 파일 그대로이며, main()만
-# run_patient_selection_flow()/run_fpca_computation() 두 단계를 순서대로 호출하도록 합쳤다.
-
 import sys
 from pathlib import Path
 
@@ -13,10 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
-from PIL import Image
 from sklearn.decomposition import PCA
 
-sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔 기본 cp949가 μ/φ/₁ 등을 인코딩 못 해 print에서 죽는 것 방지
+sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]  # Windows 콘솔 기본 cp949가 μ/φ/₁ 등을 인코딩 못 해 print에서 죽는 것 방지
 
 plt.rcParams["font.family"] = "Malgun Gothic"
 plt.rcParams["axes.unicode_minus"] = False
@@ -24,154 +17,293 @@ plt.rcParams["axes.unicode_minus"] = False
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "figure"
+MANUSCRIPT_FIGURE_DIR = PROJECT_ROOT / "docs" / "현재_논문"
 
-INTERNAL_XLSX = DATA_DIR / "gangnam_원본.xlsx"
-EXTERNAL_XLSX = DATA_DIR / "sinchon_원본.xlsx"
+INTERNAL_XLSX = DATA_DIR / "gangnam_final_dataset.xlsx"
+FLOWCHART_XLSX = DATA_DIR / "data_flowchart.xlsx"
 AGE_CUTOFF = 20
 SEED = 20260709
 N_SLICES = 128
 AEC_COLS = [f"aec_{i}" for i in range(1, N_SLICES + 1)]
 FPCA_N_FIXED = 3  # step_disease_logistic.py와 동일한 elbow 기반 고정값
 FPCA_COMPONENT_CANDIDATES_MAX = 20  # elbow 탐색용 n_components 상한
-N_SAMPLE_CURVES = 40  # 패널 A에 겹쳐 그릴 무작위 표본 곡선 수
-RECON_R2_TOP_QUANTILE = 0.75  # "재구성 적합도가 상위 25% 이내" 기준
-SCORE_TOP_QUANTILE = 0.75  # "PC1-3 성분점수가 모두 큼(절댓값 기준)" 기준
 
-INTERNAL_SITE = "Gangnam Severance Hospital"
-EXTERNAL_SITE = "Sinchon Severance Hospital"
+BORDER = "#161616"
 STATE_WHITE = "white"
 FINAL_GREEN = "#d9ead3"
-BORDER = "#161616"
 
 
-# ==================================================================================
-# Figure 1: Materials 섹션의 코호트 선정 절차를 실제 데이터로 재현하는 patient-selection flow diagram.
-# data/{gangnam,sinchon}_원본.xlsx에서 연령<20 제외만 적용하며(스캐너/kVp 제한 없음, kVp는 원본 전체가
-# 100kVp뿐이라 해제 불가), 결과 인원(internal 1,088명 / external 925명)이 원본에서 매 실행마다
-# 다시 계산된다(하드코딩 아님).
-# ==================================================================================
+# ======================================================================================
+# Figure 1: Patient selection flowchart. 사용자 요청(2026-08-27)으로 참고 이미지와 같은 "완전 순차형"
+# 포맷(초기 N -> 배제 사유 불릿(n=) 한 박스 -> 최종 N, 불릿 n 합 = 정확히 배제 인원, "or"로 합치지 않고
+# 사유별로 분리)으로 그린다.
+#
+# 처음에는 실제 파이프라인이 AEC신호/segmentation 트랙과 임상변수 트랙이 독립적으로 갈라졌다가 마지막에
+# 교집합으로 합쳐지는 구조라 순차형으로 못 그린다고 판단했으나, 사용자 지시("초기 데이터셋은 메타데이터로
+# 하고 AEC 교집합으로 순서 진행" -> "or로 묶지 말고 더 세분화")에 따라 실제 파이프라인 소스 코드
+# (C:\Users\jhjun\OneDrive\Desktop\2026-1_Study\연구코드\code\data\aec\data_flowchart.py,
+# code\data\5_merged_features.py — Clinical_Study 밖의 별도 프로젝트, 사용자가 위치를 알려줌)를 직접
+# 찾아 읽고, 그 코드가 쓰는 원본 파일(강남/신촌_DLO_Results.xlsx, _z_bounds.xlsx, _aec_total.xlsx,
+# _aec_cropped.xlsx)로 사용자가 지정한 순서(메타데이터 4단계 -> DICOM매칭 -> segmentation ->
+# AEC신호유효성 -> post-crop 재검증, 전부 이전 단계 생존자만 대상으로 순차 적용)를 직접 재계산했다.
+# 이 순서로 계산한 최종 인원이 실제 {gangnam,sinchon}_final_dataset.xlsx의 행 수(1259/1123)와
+# 정확히 일치함을 확인(2026-08-27, PYTHONIOENCODING=utf-8 python 스크립트로 직접 검증). 강남/신촌
+# 모두 이 순서에서는 "DICOM 미매칭"·"segmentation 실패" 단계 배제 인원이 0명(메타데이터 필터를 통과한
+# 사람은 이미 전부 segmentation도 성공했음)이라 화면에는 생략하고, 아래 6개 사유만 표시한다:
+#   ① 키/몸무게 결측 ② 20세 미만 ③ 키/몸무게/BMI IQR 이상치(3개 변수 통합 판정, 코드 자체가 OR로
+#   판정하는 단일 규칙) ④ 기타 컬럼 결측 ⑤ AEC 신호 유효성 기준 미달 ⑥ crop 후 AEC 재검증 실패
+# 데이터 파이프라인이 다시 바뀌면(예: data_flowchart.xlsx의 초기/최종 인원이 아래 하드코딩 값과
+# 달라지면) 이 표도 다시 계산해야 한다 - 아래 assert가 그 어긋남을 감지해 알려준다.
+# ======================================================================================
 
-def load_raw(site_key: str) -> pd.DataFrame:
-    return pd.read_excel(DATA_DIR / f"{site_key}_원본.xlsx", sheet_name="metadata", engine="openpyxl")
-
-
-# 연령<20 제외만 적용한 단일 단계 필터링(스캐너/벤더 제한 없음)
-def compute_flow(raw: pd.DataFrame) -> dict:
-    n_enroll = len(raw)
-    after_age = raw[raw["PatientAge"] >= AGE_CUTOFF]
-    return {"n_enroll": n_enroll, "n_age_excluded": n_enroll - len(after_age), "n_final": len(after_age)}
-
-
-# bbox_inches="tight" 저장 결과는 실제 그려진 픽셀(텍스트/박스)의 좌우 비대칭 여백을 그대로 남긴다.
-# 저장 후 non-white 컨텐츠 bbox를 찾아 좌우/상하 여백이 동일하도록 다시 잘라 중앙 정렬한다.
-def center_pad_png(path: Path, pad_px: int = 40) -> None:
-    im = Image.open(path).convert("RGB")
-    arr = np.array(im.convert("L"))
-    mask = arr < 250
-    rows, cols = np.where(mask.any(axis=1))[0], np.where(mask.any(axis=0))[0]
-    cropped = im.crop((int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1))
-    canvas = Image.new("RGB", (cropped.width + 2 * pad_px, cropped.height + 2 * pad_px), "white")
-    canvas.paste(cropped, (pad_px, pad_px))
-    canvas.save(path)
-
-
-def box(ax, renderer, cx, cy, w, h, text, facecolor, fontsize=24.0, fontweight="normal", min_fontsize=16.0):
-    ax.add_patch(FancyBboxPatch((cx - w / 2, cy - h / 2), w, h, boxstyle="round,pad=0.02,rounding_size=0.08",
-                                 facecolor=facecolor, edgecolor=BORDER, linewidth=1.6, zorder=2))
-    txt = ax.text(cx, cy, text, ha="center", va="center", fontweight=fontweight, zorder=3, linespacing=1.4)
-
-    (x0, y0) = ax.transData.transform((cx - w / 2, cy - h / 2))
-    (x1, y1) = ax.transData.transform((cx + w / 2, cy + h / 2))
-    box_w_px, box_h_px = abs(x1 - x0) * 0.92, abs(y1 - y0) * 0.88
-
-    fs = fontsize
-    while fs > min_fontsize:
-        txt.set_fontsize(fs)
-        bbox = txt.get_window_extent(renderer=renderer)
-        if bbox.width <= box_w_px and bbox.height <= box_h_px:
-            break
-        fs -= 0.5
-    txt.set_fontsize(fs)
-
-
-def arrow(ax, xy_from, xy_to, lw=1.6):
-    ax.add_patch(FancyArrowPatch(xy_from, xy_to, arrowstyle="-|>", mutation_scale=16, linewidth=lw,
-                                  color=BORDER, zorder=1))
+# 위 원본 파이프라인에서 사용자가 지정한 순서(메타데이터 4단계 -> AEC 신호/crop 재검증)로 직접 재계산해
+# 확인한 배제 사유별 인원(2026-08-27 검증, 실제 final_dataset.xlsx 행수와 정확히 일치)
+FLOW_BREAKDOWN = {
+    "강남": {
+        "initial": 2033,
+        "missing_height_weight": 387,
+        "age_under_20": 5,
+        "anthropometric_iqr_outlier": 44,
+        "other_missing": 28,
+        "aec_signal_invalid": 252,
+        "post_crop_revalidation_fail": 58,
+        "final_n": 1259,
+    },
+    "신촌": {
+        "initial": 2257,
+        "missing_height_weight": 5,
+        "age_under_20": 13,
+        "anthropometric_iqr_outlier": 61,
+        "other_missing": 249,
+        "aec_signal_invalid": 768,
+        "post_crop_revalidation_fail": 38,
+        "final_n": 1123,
+    },
+}
+EXCLUSION_KEYS = ["missing_height_weight", "age_under_20", "anthropometric_iqr_outlier", "other_missing",
+                  "aec_signal_invalid", "post_crop_revalidation_fail"]
 
 
-# 한 코호트 열(Enrollment -> 배제박스(연령<20) -> 최종 Inclusion box) — 스캐너 배제 단계 없음
-def draw_column(ax, renderer, cx_main, cx_excl, flow: dict, cohort_label: str, site: str, main_w=7.0, excl_w=4.8):
-    y_enroll, h_enroll = 8.6, 2.3
-    y_excl, h_excl = 6.2, 1.6
-    y_final, h_final = 3.6, 2.0
+def extract_flow(site_key: str) -> dict:
+    flow = dict(FLOW_BREAKDOWN[site_key])
+    total_excl = sum(flow[k] for k in EXCLUSION_KEYS)
+    assert flow["initial"] - total_excl == flow["final_n"], (
+        f"{site_key}: 배제 사유 합({total_excl})이 initial-final과 안 맞음 - 원본 파이프라인이 바뀌었을 수 있음, "
+        f"FLOW_BREAKDOWN 재계산 필요"
+    )
 
-    box(ax, renderer, cx_main, y_enroll, main_w, h_enroll,
-        f"{flow['n_enroll']:,} patients\nfrom {site}\n({cohort_label})", STATE_WHITE, fontweight="bold")
+    # data_flowchart.xlsx(Clinical_Study/data, 이 저장소 안에 있는 사본)의 초기/최종 인원과도 어긋나지
+    # 않는지 확인 - 어긋나면 파이프라인이 재실행된 것이므로 FLOW_BREAKDOWN을 다시 계산해야 한다
+    if FLOWCHART_XLSX.exists():
+        df = pd.read_excel(FLOWCHART_XLSX, sheet_name=site_key)
+        df.columns = [c.strip() for c in df.columns]
+        stage_col, n_col = df.columns[0], df.columns[1]
+        initial_check = int(df.loc[df[stage_col].str.contains(r"^1\. 초기 대상", regex=True, na=False), n_col].iloc[0])
+        final_check = int(df.loc[df[stage_col].str.contains(r"최종 ML 데이터셋 \(final_dataset\.xlsx\)",
+                                                              regex=True, na=False), n_col].iloc[-1])
+        assert (initial_check, final_check) == (flow["initial"], flow["final_n"]), (
+            f"{site_key}: data_flowchart.xlsx의 초기/최종 인원({initial_check}/{final_check})이 "
+            f"FLOW_BREAKDOWN({flow['initial']}/{flow['final_n']})과 다름 - 파이프라인 재실행됨, 재계산 필요"
+        )
 
-    arrow(ax, (cx_main, y_enroll - h_enroll / 2), (cx_main, y_final + h_final / 2 + 0.05))
-    box(ax, renderer, cx_excl, y_excl, excl_w, h_excl,
-        f"{flow['n_age_excluded']} excluded\nAge <{AGE_CUTOFF} years", STATE_WHITE, fontsize=20)
-    arrow(ax, (cx_main + 0.08, y_excl), (cx_excl - excl_w / 2 - 0.08, y_excl), lw=1.2)
-
-    box(ax, renderer, cx_main, y_final, main_w, h_final,
-        f"{flow['n_final']:,} patients\n({cohort_label})", FINAL_GREEN, fontweight="bold")
+    flow["total_excl"] = total_excl
+    return flow
 
 
-def plot_diagram(flow_internal: dict, flow_external: dict, out_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(20, 9.5))
-    xlim, ylim = (-0.5, 26.0), (1.7, 11.3)
-    ax.set_xlim(*xlim)
-    ax.set_ylim(*ylim)
+# matplotlib PNG(figure1.png)와 pptx(논문 Figure.pptx)가 같은 숫자/레이아웃에서 어긋나지 않도록, 도형을
+# 직접 그리지 않고 (cx, cy, w, h, ...) 데이터 좌표 스펙 리스트로만 기술한다. 렌더러(matplotlib/pptx)는
+# 이 스펙을 그대로 소비만 한다.
+def new_shape_spec() -> dict:
+    return {"boxes": [], "arrows": [], "texts": []}
+
+
+def add_box(spec, cx, cy, w, h, text, facecolor, fontsize: float = 15, fontweight="normal", ha="center"):
+    spec["boxes"].append(dict(cx=cx, cy=cy, w=w, h=h, text=text, facecolor=facecolor, fontsize=fontsize,
+                               fontweight=fontweight, ha=ha))
+
+
+def add_arrow(spec, x1, y1, x2, y2, lw=1.6):
+    spec["arrows"].append(dict(x1=x1, y1=y1, x2=x2, y2=y2, lw=lw))
+
+
+def add_text(spec, cx, cy, text, fontsize=10.5, style="italic", color="#3a3a3a"):
+    spec["texts"].append(dict(cx=cx, cy=cy, text=text, fontsize=fontsize, style=style, color=color))
+
+
+# 코호트 1개(내부 x-원점 x0 기준) 열: Initial -> (단일 화살표 옆에 배제 사유 불릿 박스) -> Final.
+# 참고 이미지와 동일하게 메인 화살표는 Initial에서 Final로 곧장 내려가고, 배제 박스는 그 화살표 중간
+# 높이에서 옆으로 갈라지는 짧은 화살표로 연결된 곁가지다.
+def add_cohort_column(spec, x0: float, flow: dict, cohort_label: str, site: str, period: str) -> None:
+    cx_main, main_w = x0 + 5.5, 11.0
+    excl_w = 10.8
+
+    y_initial, h_initial = 9.2, 1.9
+    y_final, h_final = 1.7, 1.7
+    y_excl = (y_initial - h_initial / 2 + y_final + h_final / 2) / 2
+
+    add_box(spec, cx_main, y_initial, main_w, h_initial,
+            f"{flow['initial']:,} patients with abdominal CT and\nclinical database record, {site}\n({cohort_label}, {period})",
+            STATE_WHITE, fontweight="bold")
+
+    add_arrow(spec, cx_main, y_initial - h_initial / 2, cx_main, y_final + h_final / 2 + 0.05)
+
+    add_box(spec, x0 + main_w / 2 + 1.0 + excl_w / 2, y_excl, excl_w, 3.6,
+            f"{flow['total_excl']:,} excluded:\n"
+            f"- Missing height/weight in clinical database (n={flow['missing_height_weight']:,})\n"
+            f"- Age <{AGE_CUTOFF} years (n={flow['age_under_20']:,})\n"
+            f"- Height/Weight/BMI outliers (IQR rule) (n={flow['anthropometric_iqr_outlier']:,})\n"
+            f"- Other missing clinical variables (n={flow['other_missing']:,})\n"
+            f"- AEC signal did not meet curve-validity criteria\n"
+            f"  (n={flow['aec_signal_invalid']:,})\n"
+            f"- AEC-128 signal failed post-crop validity re-check\n"
+            f"  (CV<0.05 or R²≥0.95) (n={flow['post_crop_revalidation_fail']:,})",
+            STATE_WHITE, fontsize=11, ha="left")
+    add_arrow(spec, cx_main + 0.08, y_excl, x0 + main_w / 2 + 1.0 + 0.08, y_excl, lw=1.2)
+
+    add_box(spec, cx_main, y_final, main_w, h_final,
+            f"{flow['final_n']:,} patients\n({cohort_label} ML-analysis cohort)", FINAL_GREEN, fontweight="bold")
+
+
+FIGURE1_XLIM = (-1.0, 47.0)
+FIGURE1_YLIM = (0.4, 10.7)
+
+
+def build_figure1_spec(flow_internal: dict, flow_external: dict) -> dict:
+    spec = new_shape_spec()
+    add_cohort_column(spec, 0.0, flow_internal, "internal cohort", "Gangnam Severance Hospital", "2018–2020")
+    add_cohort_column(spec, 23.5, flow_external, "external cohort", "Sinchon Severance Hospital", "2019")
+    return spec
+
+
+def render_figure1_png(spec: dict, out_paths: list[Path]) -> None:
+    fig, ax = plt.subplots(figsize=(24, 13))
+    ax.set_xlim(*FIGURE1_XLIM)
+    ax.set_ylim(*FIGURE1_YLIM)
     ax.axis("off")
 
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
+    for a in spec["arrows"]:
+        ax.add_patch(FancyArrowPatch((a["x1"], a["y1"]), (a["x2"], a["y2"]), arrowstyle="-|>", mutation_scale=14,
+                                      linewidth=a["lw"], color=BORDER, zorder=1))
+    for b in spec["boxes"]:
+        ax.add_patch(FancyBboxPatch((b["cx"] - b["w"] / 2, b["cy"] - b["h"] / 2), b["w"], b["h"],
+                                     boxstyle="round,pad=0.02,rounding_size=0.06", facecolor=b["facecolor"],
+                                     edgecolor=BORDER, linewidth=1.6, zorder=2))
+        text_x = b["cx"] - b["w"] / 2 + 0.3 if b["ha"] == "left" else b["cx"]
+        ax.text(text_x, b["cy"], b["text"], ha=b["ha"], va="center", fontsize=b["fontsize"],
+                fontweight=b["fontweight"], zorder=3, linespacing=1.5)
+    for t in spec["texts"]:
+        ax.text(t["cx"], t["cy"], t["text"], ha="center", va="center", fontsize=t["fontsize"], style=t["style"],
+                color=t["color"], zorder=3)
 
-    cx_internal_main, cx_internal_excl = 3.7, 9.9
-    cx_external_main, cx_external_excl = 16.3, 22.5
-
-    draw_column(ax, renderer, cx_internal_main, cx_internal_excl, flow_internal, "internal cohort", INTERNAL_SITE)
-    draw_column(ax, renderer, cx_external_main, cx_external_excl, flow_external, "external cohort", EXTERNAL_SITE)
-
-    ax.text((cx_internal_main + cx_external_main) / 2, 10.65,
-             "Both cohorts: CT examinations Jan 2018–Jun 2020 (internal) / 2019 (external); clinical data + abdominal CT at 100 kVp available for the same patient.\n"
-             "No CT scanner-model restriction applied (all vendors/models retained); every CT examination in the source dataset was acquired at 100 kVp,\n"
-             "so a tube-voltage restriction could not be relaxed within the available data.",
-             ha="center", va="center", fontsize=18, style="italic", color="#3a3a3a")
-
-    fig.savefig(out_path, dpi=220, bbox_inches="tight")
+    fig.tight_layout()
+    for out_path in out_paths:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+        print(f"Saved Figure 1 to {out_path}")
     plt.close(fig)
-    center_pad_png(out_path)
-    print(f"Saved patient selection flow diagram to {out_path}")
+
+
+# 논문 Figure.pptx의 편집 가능한(native shape) 버전을 같은 spec에서 재생성한다. png(matplotlib)와 숫자/
+# 레이아웃이 어긋나지 않도록 render_figure1_png가 실제로 저장한 PNG의 가로세로비를 그대로 슬라이드 크기에
+# 반영한다(슬라이드 폭은 기존 파일과 동일한 14173200 EMU 유지).
+def render_figure1_pptx(spec: dict, png_aspect_wh: float, out_path: Path) -> None:
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+    from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+    from pptx.oxml.ns import qn
+    from pptx.util import Emu, Pt
+
+    slide_w = 14173200
+    slide_h = int(round(slide_w / png_aspect_wh))
+
+    prs = Presentation()
+    prs.slide_width = Emu(slide_w)
+    prs.slide_height = Emu(slide_h)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
+
+    x0, x1 = FIGURE1_XLIM
+    y0, y1 = FIGURE1_YLIM
+    scale_x, scale_y = slide_w / (x1 - x0), slide_h / (y1 - y0)
+
+    def to_x(u: float) -> int:
+        return int(round((u - x0) * scale_x))
+
+    def to_y(u: float) -> int:  # 데이터 좌표는 위로 갈수록 y가 커지지만 pptx는 top이 위쪽 기준으로 반대
+        return int(round((y1 - u) * scale_y))
+
+    def add_arrowhead(connector) -> None:
+        ln = connector.line._get_or_add_ln()
+        tail_end = ln.makeelement(qn("a:tailEnd"), {"type": "triangle", "w": "med", "len": "med"})
+        ln.append(tail_end)
+
+    for a in spec["arrows"]:
+        connector = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Emu(to_x(a["x1"])), Emu(to_y(a["y1"])),
+                                                Emu(to_x(a["x2"])), Emu(to_y(a["y2"])))
+        connector.line.color.rgb = RGBColor.from_string(BORDER.lstrip("#").upper())
+        connector.line.width = Pt(1.5 if a["lw"] >= 1.6 else 1.0)
+        add_arrowhead(connector)
+
+    for b in spec["boxes"]:
+        left, top = to_x(b["cx"] - b["w"] / 2), to_y(b["cy"] + b["h"] / 2)
+        width, height = int(round(b["w"] * scale_x)), int(round(b["h"] * scale_y))
+        shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Emu(left), Emu(top), Emu(width), Emu(height))
+        shape.adjustments[0] = 0.06
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = RGBColor.from_string(b["facecolor"].lstrip("#").upper()
+                                                            if b["facecolor"].startswith("#") else "FFFFFF")
+        shape.line.color.rgb = RGBColor.from_string(BORDER.lstrip("#").upper())
+        shape.line.width = Pt(1.6)
+        tf = shape.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        lines = b["text"].split("\n")
+        for i, line in enumerate(lines):
+            para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            para.alignment = PP_ALIGN.LEFT if b["ha"] == "left" else PP_ALIGN.CENTER
+            run = para.add_run()
+            run.text = line
+            run.font.size = Pt(b["fontsize"])
+            run.font.bold = b["fontweight"] == "bold"
+            run.font.name = "Malgun Gothic"
+
+    for t in spec["texts"]:
+        left, top = to_x(t["cx"] - 3.5), to_y(t["cy"] + 0.6)
+        box_shape = slide.shapes.add_textbox(Emu(left), Emu(top), Emu(int(7.0 * scale_x)), Emu(int(1.2 * scale_y)))
+        tf = box_shape.text_frame
+        tf.word_wrap = True
+        lines = t["text"].split("\n")
+        for i, line in enumerate(lines):
+            para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            para.alignment = PP_ALIGN.CENTER
+            run = para.add_run()
+            run.text = line
+            run.font.size = Pt(t["fontsize"])
+            run.font.italic = t["style"] == "italic"
+            run.font.color.rgb = RGBColor.from_string(t["color"].lstrip("#").upper())
+            run.font.name = "Malgun Gothic"
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(str(out_path))
+    print(f"Saved Figure 1 pptx to {out_path}")
 
 
 def run_patient_selection_flow() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    from PIL import Image
 
-    raw_g, raw_s = load_raw("gangnam"), load_raw("sinchon")
-    flow_g, flow_s = compute_flow(raw_g), compute_flow(raw_s)
+    flow_internal = extract_flow("강남")
+    flow_external = extract_flow("신촌")
+    print(f"[Figure 1] internal: {flow_internal}")
+    print(f"[Figure 1] external: {flow_external}")
+    spec = build_figure1_spec(flow_internal, flow_external)
 
-    print("Internal (Gangnam):", flow_g)
-    print("External (Sinchon):", flow_s)
+    png_paths = [OUTPUT_DIR / "fig1_patient_selection_flow.png", MANUSCRIPT_FIGURE_DIR / "figure1.png"]
+    render_figure1_png(spec, png_paths)
 
-    plot_diagram(flow_g, flow_s, OUTPUT_DIR / "fig1_patient_selection_flow.png")
+    with Image.open(png_paths[0]) as im:
+        png_aspect_wh = im.width / im.height
+    render_figure1_pptx(spec, png_aspect_wh, MANUSCRIPT_FIGURE_DIR / "논문 Figure.pptx")
 
-
-# ==================================================================================
-# Figure 2: 내부 코호트 AEC-128 곡선에 대한 FPCA 계산 과정. 대표 환자 선택은 캡션 조건("PC1-3
-# 성분점수가 모두 크고(상위 25% 이내) 재구성 적합도도 상위 25% 이내")을 만족하는 환자 중 네
-# percentile(|PC1|,|PC2|,|PC3|,R²)의 최솟값이 가장 큰(=조건을 가장 여유있게 만족하는) 환자를
-# 결정론적으로 선택한다(select_representative_patient 참고, 하드코딩 PatientID 없음).
-# 영문 논문에 들어갈 그림이라 그림 안 텍스트(제목/축/범례)는 전부 영문으로 표기한다.
-#
-# 패널 구성(통합본 기준, 개별 파일도 동일 알파벳) 및 저장 파일(m&m 초안 Figure 2에 해당하므로 fig2 접두사로 저장):
-#   A(fig2a_sample_curves_mean.png): 무작위 표본 곡선(회색) + 평균곡선 μ(z)(검정)
-#   B(fig2b_projection_score.png): 대표 환자의 편차곡선 d_i(z) = x_i(z) - μ(z)를 φ1(z)에 투영해
-#       score_i,1을 얻는 과정(편차곡선 자체도 이 패널에서 함께 보여줌)
-#   C(fig2c_scree_elbow.png): eigenvalue scree plot과 elbow(k=3) 판단 근거
-#   D/E(fig2de_covariance_matrix.png): 128x128 공분산행렬 원본(D)과 rank-3 근사(E) 비교
-#   F(fig2f_eigenfunctions.png): eigenfunction φ1-φ3를 μ(z) ± √λ_k·φ_k(z)로 표시
-# ==================================================================================
 
 # 원본 metadata에서 연령<20만 제외(스캐너/벤더 제한 없음)한 뒤 aec_128 원시곡선을 병합
 def load_cohort(xlsx_path: Path) -> pd.DataFrame:
@@ -208,91 +340,20 @@ def compute_scree(aec_raw: np.ndarray) -> tuple[pd.Series, pd.Series, int]:
     return cum_var, scree, elbow_n
 
 
-# 캡션 조건("PC1-3 성분점수가 모두 크고 재구성 적합도가 상위 25% 이내")을 만족하는 환자 중, 네 percentile
-# (|PC1|,|PC2|,|PC3|,R²)의 최솟값이 가장 큰(=조건을 가장 여유있게 만족하는) 환자를 결정론적으로 선택
-def select_representative_patient(scores: np.ndarray, r2_per_patient: np.ndarray) -> int:
-    score_pct = np.column_stack([pd.Series(np.abs(scores[:, k])).rank(pct=True).to_numpy()
-                                  for k in range(scores.shape[1])])
-    r2_pct = pd.Series(r2_per_patient).rank(pct=True).to_numpy()
-    all_pct = np.column_stack([score_pct, r2_pct])
-
-    qualifies = np.all(score_pct >= SCORE_TOP_QUANTILE, axis=1) & (r2_pct >= RECON_R2_TOP_QUANTILE)
-    assert qualifies.any(), "캡션 조건(PC1-3 절댓값 상위 25% & 재구성 R² 상위 25%)을 만족하는 환자가 없음"
-
-    min_pct = all_pct.min(axis=1)
-    min_pct_masked = np.where(qualifies, min_pct, -np.inf)
-    rep_idx = int(np.argmax(min_pct_masked))
-
-    score_pct_rep = np.array([(np.abs(scores[:, k]) < np.abs(scores[rep_idx, k])).mean() for k in range(scores.shape[1])])
-    r2_pct_rep = (r2_per_patient < r2_per_patient[rep_idx]).mean()
-    assert np.all(score_pct_rep >= 0.75), f"대표 환자의 PC score가 '모두 큼' 조건(상위 25%)을 만족하지 않음: {score_pct_rep}"
-    assert r2_pct_rep >= RECON_R2_TOP_QUANTILE, f"대표 환자의 재구성 R²가 상위 25% 조건을 만족하지 않음: {r2_pct_rep:.3f}"
-    return rep_idx
-
-
-# (A) 무작위 표본 곡선(회색) + 평균곡선(검정)
-def plot_panel_a_sample_and_mean(aec_raw: np.ndarray, mean_curve: np.ndarray, out_path: Path) -> None:
-    x_axis = np.arange(1, N_SLICES + 1)
-    rng = np.random.default_rng(SEED)
-    sample_idx = rng.choice(aec_raw.shape[0], size=min(N_SAMPLE_CURVES, aec_raw.shape[0]), replace=False)
-
-    fig, ax = plt.subplots(figsize=(16, 11))
-    for i in sample_idx:
-        ax.plot(x_axis, aec_raw[i], color="#c9c7c1", linewidth=1, alpha=0.6)
-    ax.plot(x_axis, mean_curve, color="#161616", linewidth=3, label="mean curve μ(z)")
-    ax.set_title("Figure 1A. Sample curves and mean curve", fontsize=32, fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("AEC value", fontsize=26)
-    ax.tick_params(labelsize=22)
-    ax.legend(fontsize=22, loc="best")
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved Figure 1A to {out_path}")
-
-
-# (B) 대표 환자의 편차곡선 d_i(z) = x_i(z) - μ(z)를 φ1에 투영해 component score를 얻는 과정
-def plot_panel_b_projection(d_rep: np.ndarray, phi1: np.ndarray, score1: float, out_path: Path) -> None:
-    x_axis = np.arange(1, N_SLICES + 1)
-    fig, ax = plt.subplots(figsize=(16, 11))
-    ax2 = ax.twinx()
-    ax.plot(x_axis, d_rep, color="#2a78d6", linewidth=3, label="d_i(z)")
-    ax2.plot(x_axis, phi1, color="#e2622e", linewidth=3, linestyle="--", label="φ1(z)")
-    ax.set_title("Figure 1B. Deviation curve d_i(z), projected onto φ1 → component score", fontsize=28,
-                 fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("d_i(z) = x_i(z) - μ(z)", fontsize=26, color="#2a78d6")
-    ax2.set_ylabel("φ1(z)", fontsize=26, color="#e2622e")
-    ax.tick_params(labelsize=22)
-    ax2.tick_params(labelsize=22)
-    ax.text(0.03, 0.05, f"score_i,1 = Σ d_i(z)·φ1(z)\n= {score1:,.1f}", transform=ax.transAxes, fontsize=22,
-             va="bottom", ha="left", bbox={"boxstyle": "round", "facecolor": "white", "edgecolor": "#161616"})
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=20, loc="upper right")
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved Figure 1B to {out_path}")
-
-
 # (C) eigenvalue scree plot과 elbow(k=3) 판단 근거
 def plot_panel_c_scree_elbow(scree: pd.Series, elbow_n: int, out_path: Path) -> None:
+    scree_vals = scree.to_numpy()
     fig, ax = plt.subplots(figsize=(16, 11))
-    ax.plot(scree.index, scree.values, marker="o", markersize=10, linewidth=3, color="#161616",
+    ax.plot(scree.index, scree_vals, marker="o", markersize=10, linewidth=3, color="#161616",
             label="individual explained variance ratio")
-    ax.plot([scree.index[0], scree.index[-1]], [scree.values[0], scree.values[-1]], color="#898781",
+    ax.plot([scree.index[0], scree.index[-1]], [scree_vals[0], scree_vals[-1]], color="#898781",
             linestyle=":", linewidth=2.5, label="first-to-last point line (chord)")
     ax.axvline(elbow_n, color="#e2622e", linestyle="--", linewidth=3, label=f"elbow k={elbow_n}")
     ax.set_xticks(list(scree.index))
-    ax.set_title("Figure 1C. Scree plot and elbow-based component selection", fontsize=28, fontweight="bold",
-                 pad=20)
-    ax.set_xlabel("component index", fontsize=26)
-    ax.set_ylabel("individual explained variance ratio", fontsize=26)
-    ax.tick_params(labelsize=18)
-    ax.legend(fontsize=15, loc="upper right", bbox_to_anchor=(1.0, 1.02), frameon=True)
+    ax.set_xlabel("component index", fontsize=32.5)
+    ax.set_ylabel("individual explained variance ratio", fontsize=32.5)
+    ax.tick_params(labelsize=30)
+    ax.legend(fontsize=27.5, loc="upper right", bbox_to_anchor=(1.0, 1.0), frameon=True)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -300,186 +361,17 @@ def plot_panel_c_scree_elbow(scree: pd.Series, elbow_n: int, out_path: Path) -> 
     print(f"Saved Figure 1C to {out_path}")
 
 
-# (D, E) 128x128 공분산행렬 - 원본(D)과 상위 3개 eigenfunction만으로 재구성한 rank-3 근사(E)
-def plot_panel_de_covariance_matrices(cov_matrix: np.ndarray, cov_rank3: np.ndarray, out_path: Path) -> None:
-    vmin, vmax = float(cov_matrix.min()), float(cov_matrix.max())
-    fig, axes = plt.subplots(1, 2, figsize=(24, 11))
-
-    im = axes[0].imshow(cov_matrix, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower")
-    axes[0].set_title("Figure 1D. Covariance matrix (original)", fontsize=28, fontweight="bold", pad=18)
-    axes[0].set_xlabel("z", fontsize=24)
-    axes[0].set_ylabel("z", fontsize=24)
-    axes[0].tick_params(labelsize=18)
-    fig.colorbar(im, ax=axes[0], fraction=0.046, pad=0.04)
-
-    im = axes[1].imshow(cov_rank3, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower")
-    axes[1].set_title(f"Figure 1E. Covariance matrix (rank-{FPCA_N_FIXED} approximation)", fontsize=28,
-                       fontweight="bold", pad=18)
-    axes[1].set_xlabel("z", fontsize=24)
-    axes[1].set_ylabel("z", fontsize=24)
-    axes[1].tick_params(labelsize=18)
-    fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
-
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved Figure 1D/E to {out_path}")
-
-
-# (F) eigenfunction phi1-phi3를 mean(z) +- sqrt(eigenvalue_k)*phi_k(z)로 표시
-def plot_panel_f_eigenfunctions(mean_curve: np.ndarray, pca3: PCA, out_path: Path) -> None:
-    x_axis = np.arange(1, N_SLICES + 1)
-    colors = ["#2a78d6", "#e2622e", "#1baf7a"]
-
-    fig, ax = plt.subplots(figsize=(20, 11))
-    for k in range(FPCA_N_FIXED):
-        scale = np.sqrt(pca3.explained_variance_[k])
-        upper, lower = mean_curve + scale * pca3.components_[k], mean_curve - scale * pca3.components_[k]
-        ax.fill_between(x_axis, lower, upper, color=colors[k], alpha=0.18)
-        ax.plot(x_axis, upper, color=colors[k], linewidth=2.5,
-                 label=f"φ{k + 1} (variance explained {pca3.explained_variance_ratio_[k] * 100:.1f}%)")
-        ax.plot(x_axis, lower, color=colors[k], linewidth=2.5)
-    ax.plot(x_axis, mean_curve, color="#161616", linewidth=3, linestyle=":", label="mean curve μ(z)")
-    ax.set_title("Figure 1F. Eigenfunctions φ1-φ3 (μ(z) ± √λ_k·φ_k(z))", fontsize=30, fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("AEC value", fontsize=26)
-    ax.tick_params(labelsize=22)
-    ax.legend(fontsize=20, loc="best")
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved Figure 1F to {out_path}")
-
-
-# A-F를 2행 3열 그리드 하나에 합친 통합본(docx Figure 2에 실제로 삽입되는 파일)
-def plot_figure1_combined(aec_raw: np.ndarray, mean_curve: np.ndarray, cov_matrix: np.ndarray, cov_rank3: np.ndarray,
-                           pca3: PCA, d_rep: np.ndarray, score1: float, scree: pd.Series, elbow_n: int,
-                           out_path: Path) -> None:
-    x_axis = np.arange(1, N_SLICES + 1)
-    vmin, vmax = float(cov_matrix.min()), float(cov_matrix.max())
-    rng = np.random.default_rng(SEED)
-    sample_idx = rng.choice(aec_raw.shape[0], size=min(N_SAMPLE_CURVES, aec_raw.shape[0]), replace=False)
-
-    fig = plt.figure(figsize=(19, 26))
-    gs = fig.add_gridspec(3, 2, hspace=0.7, wspace=0.4)
-
-    ax = fig.add_subplot(gs[0, 0])
-    for i in sample_idx:
-        ax.plot(x_axis, aec_raw[i], color="#c9c7c1", linewidth=1, alpha=0.6)
-    ax.plot(x_axis, mean_curve, color="#161616", linewidth=3, label="mean curve μ(z)")
-    ax.set_title("(A) Sample curves and mean curve", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("AEC value", fontsize=26)
-    ax.tick_params(labelsize=21)
-    ax.legend(fontsize=22, loc="best")
-    ax.grid(alpha=0.3)
-
-    ax = fig.add_subplot(gs[0, 1])
-    ax2 = ax.twinx()
-    ax.plot(x_axis, d_rep, color="#2a78d6", linewidth=2.5, label="d_i(z)")
-    ax2.plot(x_axis, pca3.components_[0], color="#e2622e", linewidth=2.5, linestyle="--", label="φ1(z)")
-    ax.set_title("(B) Deviation curve, projected onto φ1 → score", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("d_i(z) = x_i(z) - μ(z)", fontsize=26, color="#2a78d6")
-    ax2.set_ylabel("φ1(z)", fontsize=26, color="#e2622e")
-    ax.tick_params(labelsize=21)
-    ax2.tick_params(labelsize=21)
-    ax.text(0.03, 0.05, f"score_i,1 = Σ d_i(z)·φ1(z)\n= {score1:,.1f}", transform=ax.transAxes, fontsize=24,
-             va="bottom", ha="left", bbox={"boxstyle": "round", "facecolor": "white", "edgecolor": "#161616"})
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=21, loc="upper right")
-    ax.grid(alpha=0.3)
-
-    ax = fig.add_subplot(gs[1, 0])
-    ax.plot(scree.index, scree.values, marker="o", markersize=7, linewidth=2.5, color="#161616",
-            label="individual explained variance ratio")
-    ax.plot([scree.index[0], scree.index[-1]], [scree.values[0], scree.values[-1]], color="#898781",
-            linestyle=":", linewidth=2, label="first-to-last point line (chord)")
-    ax.axvline(elbow_n, color="#e2622e", linestyle="--", linewidth=2.5, label=f"elbow k={elbow_n}")
-    ax.set_xticks(list(scree.index))
-    ax.set_title("(C) Scree plot / elbow", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("component index", fontsize=26)
-    ax.set_ylabel("individual explained variance ratio", fontsize=26)
-    ax.tick_params(labelsize=20)
-    ax.legend(fontsize=13, loc="upper right", bbox_to_anchor=(1.0, 1.02), frameon=True)
-    ax.grid(alpha=0.3)
-
-    ax = fig.add_subplot(gs[1, 1])
-    im = ax.imshow(cov_matrix, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
-    ax.set_title("(D) Covariance matrix (original)", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("z", fontsize=26)
-    ax.set_ylabel("z", fontsize=26)
-    ax.tick_params(labelsize=21)
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=19)
-
-    ax = fig.add_subplot(gs[2, 0])
-    im = ax.imshow(cov_rank3, cmap="RdBu_r", vmin=vmin, vmax=vmax, origin="lower", aspect="auto")
-    ax.set_title(f"(E) Covariance matrix (rank-{FPCA_N_FIXED} approx.)", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("z", fontsize=26)
-    ax.set_ylabel("z", fontsize=26)
-    ax.tick_params(labelsize=21)
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=19)
-
-    ax = fig.add_subplot(gs[2, 1])
-    colors = ["#2a78d6", "#e2622e", "#1baf7a"]
-    for k in range(FPCA_N_FIXED):
-        scale = np.sqrt(pca3.explained_variance_[k])
-        upper, lower = mean_curve + scale * pca3.components_[k], mean_curve - scale * pca3.components_[k]
-        ax.fill_between(x_axis, lower, upper, color=colors[k], alpha=0.18)
-        ax.plot(x_axis, upper, color=colors[k], linewidth=2,
-                 label=f"φ{k + 1} ({pca3.explained_variance_ratio_[k] * 100:.1f}%)")
-        ax.plot(x_axis, lower, color=colors[k], linewidth=2)
-    ax.plot(x_axis, mean_curve, color="#161616", linewidth=2.5, linestyle=":", label="mean curve μ(z)")
-    ax.set_title("(F) Eigenfunctions φ1-φ3 (μ(z) ± √λ_k·φ_k(z))", fontsize=24, fontweight="bold", pad=20)
-    ax.set_xlabel("AEC slice position z", fontsize=26)
-    ax.set_ylabel("AEC value", fontsize=26)
-    ax.tick_params(labelsize=21)
-    ax.legend(fontsize=20, loc="best")
-    ax.grid(alpha=0.3)
-
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved combined Figure 1 to {out_path}")
-
-
 def run_fpca_computation() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     meta = load_cohort(INTERNAL_XLSX)
     aec_raw = meta[AEC_COLS].astype(float).to_numpy()
-    mean_curve = aec_raw.mean(axis=0)
 
     cum_var, scree, elbow_n = compute_scree(aec_raw)
     print(f"[FPCA] 누적 explained variance ratio(PC1-{FPCA_N_FIXED}): "
           f"{cum_var.loc[:FPCA_N_FIXED].round(4).to_dict()}, elbow k={elbow_n}")
     assert elbow_n == FPCA_N_FIXED, f"elbow({elbow_n}) != FPCA_N_FIXED({FPCA_N_FIXED}) - 캡션 k=3 근거 재확인 필요"
 
-    pca3 = PCA(n_components=FPCA_N_FIXED, random_state=SEED).fit(aec_raw)
-    scores3 = pca3.transform(aec_raw)
-    recon3 = mean_curve[None, :] + scores3 @ pca3.components_
-    ss_res = ((aec_raw - recon3) ** 2).sum(axis=1)
-    ss_tot = ((aec_raw - mean_curve[None, :]) ** 2).sum(axis=1)
-    r2_per_patient = 1 - ss_res / ss_tot
-
-    rep_idx = select_representative_patient(scores3, r2_per_patient)
-    print(f"[대표 환자] PatientID={meta['PatientID'].iloc[rep_idx]}, "
-          f"score(PC1-{FPCA_N_FIXED})={scores3[rep_idx].round(1)}, R²={r2_per_patient[rep_idx]:.3f}")
-
-    cov_matrix = np.cov((aec_raw - mean_curve[None, :]).T)
-    cov_rank3 = (pca3.components_.T * pca3.explained_variance_) @ pca3.components_
-    d_rep = aec_raw[rep_idx] - mean_curve
-
-    plot_panel_a_sample_and_mean(aec_raw, mean_curve, OUTPUT_DIR / "fig2a_sample_curves_mean.png")
-    plot_panel_b_projection(d_rep, pca3.components_[0], float(scores3[rep_idx, 0]),
-                             OUTPUT_DIR / "fig2b_projection_score.png")
-    plot_panel_c_scree_elbow(scree.loc[:20], elbow_n, OUTPUT_DIR / "fig2c_scree_elbow.png")
-    plot_panel_de_covariance_matrices(cov_matrix, cov_rank3, OUTPUT_DIR / "fig2de_covariance_matrix.png")
-    plot_panel_f_eigenfunctions(mean_curve, pca3, OUTPUT_DIR / "fig2f_eigenfunctions.png")
-    plot_figure1_combined(aec_raw, mean_curve, cov_matrix, cov_rank3, pca3, d_rep, float(scores3[rep_idx, 0]),
-                           scree.loc[:20], elbow_n, OUTPUT_DIR / "fig2_combined.png")
+    plot_panel_c_scree_elbow(scree.loc[:20], elbow_n, OUTPUT_DIR / "fig_scree_elbow.png")
 
 
 def main() -> None:

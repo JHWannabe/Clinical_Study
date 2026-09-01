@@ -1,0 +1,78 @@
+AEC 연구 논문 - References 1~24 다운로드 링크 목록
+(10, 11, 12번은 이미 이 폴더에 PDF 저장 완료 — 12번은 arXiv 프리프린트이므로 아래 정식본 링크로 교체 다운로드 권장)
+
+연세대 계정으로 로그인한 브라우저에서 여시면 됩니다. 도서관 원문복사/EZproxy 경유가 필요할 수 있는 저널(Radiology, RadioGraphics, Medical Physics, AJR, Statistics in Medicine, Biometrics, European Radiology, IEEE, JNCI, Epidemiology, Annals of Internal Medicine)은 도서관 프록시 로그인 후 접속 권장.
+
+1. Chang Y, et al. Radiology 2024;312(2):e233410.
+   https://doi.org/10.1148/radiol.233410
+
+2. Pickhardt PJ. Radiology 2022;303(2):241-254. [무료 PMC]
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC9083232/
+
+3. Pickhardt PJ, Summers RM, Garrett JW, et al. Radiology 2023;307(5):e222044. [무료 PMC]
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC10315516/
+
+4. Kalra MK, Maher MM, Toth TL, et al. Radiology 2004;232:347-353.
+   https://pubmed.ncbi.nlm.nih.gov/15286306/
+
+5. McCollough CH, Bruesewitz MR, Kofler JM Jr. RadioGraphics 2006;26(2):503-512.
+   https://doi.org/10.1148/rg.262055138
+
+6. Bostani M, McMillan K, Lu P, et al. Med Phys 2015;42(2):958-968. [무료 eScholarship]
+   https://escholarship.org/uc/item/7t49k2b9
+
+7. Boone JM, Strauss KJ, Cody DD, et al. AAPM Report No. 204. 2011.
+   https://www.aapm.org/pubs/reports/RPT_204.pdf
+
+8. Li X, Marschall TA, Yang K, Liu B. Med Phys 2022;49(2):1303-1311.
+   https://doi.org/10.1002/mp.15402
+
+9. Pickhardt PJ, Graffy PM, Zea R, et al. AJR 2021;216(1):85-92.
+   https://doi.org/10.2214/AJR.20.23049
+
+10. Chung GE, Yoon JW, Kim H, et al. Sci Rep 2026;16(1):9587. [저장 완료 - 이 폴더의 PDF]
+    https://doi.org/10.1038/s41598-025-30244-6
+
+11. Medrano MJ, et al. arXiv:2506.24062, 2025. [저장 완료 - 이 폴더의 PDF]
+    https://arxiv.org/abs/2506.24062
+    (정식 출판본: Phys Med Biol, 2025) https://doi.org/10.1088/1361-6560/ae2181
+
+12. Wasserthal J, Breit HC, Meyer MT, et al. Radiol Artif Intell 2023;5(5):e230024. [프리프린트만 저장됨 - 정식본은 아래 링크로 교체 권장]
+    https://doi.org/10.1148/ryai.230024
+
+13. Ramsay JO, Silverman BW. Functional Data Analysis. 2nd ed. Springer; 2005. [단행본 - PDF 아닌 도서, 학교 도서관 대출/전자책 확인]
+    https://link.springer.com/book/10.1007/b98888
+
+14. Shi B, Wang T, Tu W, et al. Stat Med 2021;40(3):650-667.
+    https://doi.org/10.1002/sim.8794
+
+15. Jiang S, Cao J, Rosner B, Colditz GA. Biometrics 2023;79(2):1359-1369. [무료 PMC]
+    https://pmc.ncbi.nlm.nih.gov/articles/PMC9160217/
+
+16. Satopaa V, Albrecht J, Irwin D, Raghavan B. ICDCSW 2011:166-171.
+    https://doi.org/10.1109/ICDCSW.2011.20
+
+17. DeLong ER, DeLong DM, Clarke-Pearson DL. Biometrics 1988;44(3):837-845.
+    https://doi.org/10.2307/2531595
+
+18. Sun X, Xu W. IEEE Signal Process Lett 2014;21(11):1389-1393.
+    https://doi.org/10.1109/LSP.2014.2337313
+
+19. Youden WJ. Cancer 1950;3(1):32-35.
+    https://doi.org/10.1002/1097-0142(1950)3:1%3C32::AID-CNCR2820030106%3E3.0.CO;2-3
+
+20. Jeon ET, Park H, Lee JK, et al. J Med Internet Res 2025;27:e69785. [무료 PMC / JMIR 완전 오픈액세스]
+    https://pmc.ncbi.nlm.nih.gov/articles/PMC12123229/
+    https://www.jmir.org/2025/1/e69785
+
+21. Bartholomeus GA, van Amsterdam WAC, den Harder AM, et al. Eur Radiol 2023;33(10):7044-7055. [무료 PMC]
+    https://pmc.ncbi.nlm.nih.gov/articles/PMC10511375/
+
+22. Pepe MS, Janes H, Li CI. J Natl Cancer Inst. 2014;106(4):dju041. [무료 PMC]
+    https://pmc.ncbi.nlm.nih.gov/articles/PMC3982889/
+
+23. Kerr KF, Wang Z, Janes H, McClelland RL, Psaty BM, Pepe MS. Epidemiology. 2014;25(1):114-121. [무료 PMC]
+    https://pmc.ncbi.nlm.nih.gov/articles/PMC3918180/
+
+24. Collins GS, Reitsma JB, Altman DG, Moons KGM. Ann Intern Med. 2015;162(1):55-63.
+    https://doi.org/10.7326/M14-0697

@@ -1,0 +1,15 @@
+section,variable,internal,external,test,statistic,p_value
+True,Demographics,,,,,
+False,Age (years)*,57.3 ± 12.1,59.7 ± 12.3,Welch t-test,-4.816,0.0
+False,"Male sex, n (%)",475 (37.7%),547 (48.7%),chi-square,29.215,0.0
+True,Anthropometry,,,,,
+False,Height (cm)*,162.8 ± 8.0,163.7 ± 8.3,Welch t-test,-2.563,0.0104
+False,Weight (kg)*,62.0 ± 10.1,62.4 ± 10.1,Welch t-test,-0.81,0.4177
+True,CT-derived measures,,,,,
+False,VAT (cm2)†,7524.9 (4538.9–11342.9),8561.4 (5103.8–12366.4),Mann-Whitney U test,654344.5,0.0017
+False,SAT (cm2)†,18305.5 (13971.1–23306.2),17220.1 (11678.2–23237.8),Mann-Whitney U test,777033.0,0.0
+False,"Mean tube current, mean_mAs (mA)*",312.5 ± 85.9,204.1 ± 84.1,Welch t-test,31.09,0.0
+True,"Comorbidities, n (%)",,,,,
+False,HTN,385 (30.6%),507 (45.1%),chi-square,53.77,0.0
+False,DM,232 (18.4%),335 (29.8%),chi-square,42.556,0.0
+False,CKD,105 (8.3%),188 (16.7%),chi-square,38.832,0.0

@@ -40,8 +40,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "step_disease_logistic"
 
-INTERNAL_XLSX = DATA_DIR / "gangnam_원본.xlsx"
-EXTERNAL_XLSX = DATA_DIR / "sinchon_원본.xlsx"
+INTERNAL_XLSX = DATA_DIR / "gangnam_final_dataset.xlsx"
+EXTERNAL_XLSX = DATA_DIR / "sinchon_final_dataset.xlsx"
 AGE_CUTOFF = 20
 N_FOLDS = 5
 SEED = 20260709
@@ -52,6 +52,13 @@ VAT_COL = "VAT(내장지방)_SUM"
 SAT_COL = "SAT(피하지방)_SUM"
 MEAN_MAS_COL = "mean_mAs"
 CLINICAL_BASE_COLS = ["PatientAge", "Height", "Weight"]
+
+# 2026-08-27 sinchon_final_dataset.xlsx 재교체본에서 Height/Weight가 1/1, 10/10 등 placeholder성 값으로
+# 손상되어 있음을 발견(BMI 10000/1000/2.08/100 등 비정상치)해 4명을 제외했었으나, 이후 파일이 다시
+# 교체되며 3명(1858333/4036195/4371520)은 아예 사라졌고 남은 1명(2036751)은 Height=176.0/Weight=61.0/
+# BMI=19.69로 완전히 정상값으로 복구된 것을 확인(2026-08-27 재확인) — 이 상수를 그대로 두면 이미 정상인
+# 환자를 이유 없이 계속 제외하게 되어 비워둠. 향후 새로운 손상 사례가 생기면 여기 추가할 것
+EXCLUDED_PATIENT_IDS: set[int] = set()
 
 FPCA_COMPONENT_CANDIDATES_MAX = 20
 MIN_POSITIVES = 2
@@ -90,11 +97,25 @@ FAMILIES = {
     "vatsat": ["clinic4", "clinic4_vatsat", "clinic4_vatsat_aec"],
 }
 
+# outputs/figure/fig_scree_elbow.png(figure_manuscript.py plot_panel_c_scree_elbow, figsize=16x11,
+# label/tick/legend fontsize=32.5/30/27.5)와 동일한 "폰트크기:이미지크기" 비율을 유지하는 스케일러
+# (사용자 요청 2026-08-27: "이미지 크기와 폰트 크기를 fig_scree_elbow.png 비율로 해줘")
+_REF_AVG_DIM = (16.0 + 11.0) / 2
+_LABEL_FS_RATIO = 32.5 / _REF_AVG_DIM
+_TICK_FS_RATIO = 30.0 / _REF_AVG_DIM
+_LEGEND_FS_RATIO = 27.5 / _REF_AVG_DIM
+
+
+def scaled_fontsizes(width: float, height: float) -> tuple[float, float, float]:
+    avg_dim = (width + height) / 2
+    return _LABEL_FS_RATIO * avg_dim, _TICK_FS_RATIO * avg_dim, _LEGEND_FS_RATIO * avg_dim
+
 
 # 원본 metadata에서 연령<20만 제외(스캐너/벤더 제한 없음)한 뒤 aec_128 원시곡선을 병합하고, 128포인트 평균인
 # mean_mAs를 새로 계산해 둔다(사용자 확인: 기존 mAs 컬럼 대신 AEC-128 곡선 평균을 "mean mAs"로 정의)
 def load_cohort(xlsx_path: Path) -> pd.DataFrame:
     meta = pd.read_excel(xlsx_path, sheet_name="metadata", engine="openpyxl").reset_index(drop=True)
+    meta = meta[~meta["PatientID"].isin(EXCLUDED_PATIENT_IDS)].reset_index(drop=True)
     meta = meta[meta["PatientAge"] >= AGE_CUTOFF].reset_index(drop=True)
     aec = pd.read_excel(xlsx_path, sheet_name="aec_128", engine="openpyxl")
     merged = meta.merge(aec[["PatientID"] + AEC_COLS], on="PatientID", how="inner")
@@ -223,6 +244,23 @@ def delong_paired_auc_test(y: np.ndarray, score_a: np.ndarray, score_b: np.ndarr
     return {"auc_a": float(aucs[0]), "auc_b": float(aucs[1]), "diff": diff, "z": float(z), "p_value": p}
 
 
+# AUC의 bootstrap 95% CI 산출(external frozen 평가에만 적용, internal은 5-fold CV OOF 점추정만 사용).
+# 양성 비율이 낮아 일부 resample은 한쪽 클래스가 비므로 그런 반복은 제외
+def bootstrap_auc_ci(y: np.ndarray, score: np.ndarray, n_boot: int = 3000, seed: int = SEED) -> tuple[float, float]:
+    rng = np.random.default_rng(seed)
+    n = len(y)
+    boot_aucs = []
+    for bi in rng.integers(0, n, size=(n_boot, n)):
+        y_bi = y[bi]
+        if len(np.unique(y_bi)) < 2:
+            continue
+        boot_aucs.append(roc_auc_score(y_bi, score[bi]))
+    if len(boot_aucs) < n_boot * 0.5:
+        return float("nan"), float("nan")
+    lo, hi = np.percentile(boot_aucs, [2.5, 97.5])
+    return float(lo), float(hi)
+
+
 def youden_threshold(y: np.ndarray, score: np.ndarray) -> float:
     fpr, tpr, thresholds = roc_curve(y, score)
     j = tpr - fpr
@@ -236,6 +274,110 @@ def classification_stats(y: np.ndarray, score: np.ndarray, threshold: float) -> 
     spec = tn / (tn + fp) if (tn + fp) > 0 else float("nan")
     acc = (tp + tn) / len(y)
     return {"sensitivity": float(sens), "specificity": float(spec), "accuracy": float(acc)}
+
+
+# Table 1: 내부/외부 코호트 기저 특성 비교. 레퍼런스 논문(Chang & Yoon et al., Radiology 2024) Table 1
+# 스타일 반영(사용자 확인 2026-08-25: 서식/스타일만 반영, 내부-외부 코호트 비교 구조는 유지) —
+# (1) Demographics/Anthropometry/CT-derived measures/Comorbidities 4개 section 헤더로 구역화,
+# (2) 연속형 변수를 정규분포(*, mean±SD, Welch's t-test) vs 비정규분포(†, median[IQR], Mann-Whitney U
+#     test)로 구분. VAT/SAT는 skewness 0.6-1.1로 뚜렷한 우측왜도(신체 지방 분포의 통상적 특성)라 비정규,
+#     Age/Height/Weight/mean_mAs는 |skew|<=0.5라 정규로 분류(D'Agostino-Pearson 검정은 표본수가 커
+#     민감도가 과도해 판정 기준으로 쓰지 않고 skewness 크기로 판단)
+def build_table1(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> pd.DataFrame:
+    rows: list[dict] = []
+
+    def section(label: str) -> None:
+        rows.append({"section": True, "variable": label, "internal": "", "external": "",
+                     "test": "", "statistic": "", "p_value": ""})
+
+    def add_continuous(col: str, label: str, normal: bool) -> None:
+        a = pd.to_numeric(meta_int[col], errors="coerce").dropna().to_numpy()
+        b = pd.to_numeric(meta_ext[col], errors="coerce").dropna().to_numpy()
+        if normal:
+            stat, p = stats.ttest_ind(a, b, equal_var=False)
+            internal = f"{a.mean():.1f} ± {a.std(ddof=1):.1f}"
+            external = f"{b.mean():.1f} ± {b.std(ddof=1):.1f}"
+            test, marker = "Welch t-test", "*"
+        else:
+            stat, p = stats.mannwhitneyu(a, b, alternative="two-sided")
+            q1a, q3a = np.percentile(a, [25, 75])
+            q1b, q3b = np.percentile(b, [25, 75])
+            internal = f"{np.median(a):.1f} ({q1a:.1f}–{q3a:.1f})"
+            external = f"{np.median(b):.1f} ({q1b:.1f}–{q3b:.1f})"
+            test, marker = "Mann-Whitney U test", "†"
+        rows.append({
+            "section": False, "variable": f"{label}{marker}",
+            "internal": internal, "external": external,
+            "test": test, "statistic": round(float(stat), 3), "p_value": round(float(p), 4),
+        })
+
+    def add_categorical(is_pos_int: pd.Series, is_pos_ext: pd.Series, label: str) -> None:
+        n_int, n_ext = int(is_pos_int.sum()), int(is_pos_ext.sum())
+        big_n_int, big_n_ext = len(is_pos_int), len(is_pos_ext)
+        table = np.array([[n_int, big_n_int - n_int], [n_ext, big_n_ext - n_ext]])
+        chi2, p, _, _ = stats.chi2_contingency(table, correction=False)
+        rows.append({
+            "section": False, "variable": label,
+            "internal": f"{n_int} ({n_int / big_n_int:.1%})",
+            "external": f"{n_ext} ({n_ext / big_n_ext:.1%})",
+            "test": "chi-square", "statistic": round(float(chi2), 3), "p_value": round(float(p), 4),
+        })
+
+    section("Demographics")
+    add_continuous("PatientAge", "Age (years)", normal=True)
+    add_categorical(meta_int["PatientSex"].astype(str).str.upper().eq("M"),
+                     meta_ext["PatientSex"].astype(str).str.upper().eq("M"), "Male sex, n (%)")
+
+    section("Anthropometry")
+    add_continuous("Height", "Height (cm)", normal=True)
+    add_continuous("Weight", "Weight (kg)", normal=True)
+
+    section("CT-derived measures")
+    add_continuous(VAT_COL, "VAT (cm2)", normal=False)
+    add_continuous(SAT_COL, "SAT (cm2)", normal=False)
+    add_continuous(MEAN_MAS_COL, "Mean tube current, mean_mAs (mA)", normal=True)
+
+    section("Comorbidities, n (%)")
+    for feat in FEATURES:
+        add_categorical(pd.to_numeric(meta_int[feat], errors="coerce").fillna(0).astype(int).eq(1),
+                         pd.to_numeric(meta_ext[feat], errors="coerce").fillna(0).astype(int).eq(1), feat)
+
+    table1 = pd.DataFrame(rows)
+    table1.to_csv(output_dir / "table1_patient_characteristics.csv", index=False)
+    table1.to_excel(output_dir / "table1_patient_characteristics.xlsx", index=False)
+    print(f"Saved Table 1 to {output_dir / 'table1_patient_characteristics.csv'}")
+    return table1
+
+
+# 사전지정 AEC 점수(FPCA PC1-k)와 VAT/SAT의 Pearson 상관(질환 무관, 코호트별 1회). AEC 점수가 단순히
+# VAT/SAT의 재현이 아니라는 고찰 주장을 뒷받침하는 직접적 수치 근거
+def compute_aec_vatsat_correlation(fpca_df: pd.DataFrame, meta: pd.DataFrame, fpca_cols: list[str],
+                                    cohort_label: str) -> pd.DataFrame:
+    merged = fpca_df.merge(meta[["PatientID", VAT_COL, SAT_COL]], on="PatientID", how="inner")
+    rows = []
+    for pc in fpca_cols:
+        for tissue_col, tissue_label in [(VAT_COL, "VAT"), (SAT_COL, "SAT")]:
+            r, p = stats.pearsonr(merged[pc], merged[tissue_col])
+            rows.append({"cohort": cohort_label, "component": pc, "tissue": tissue_label,
+                         "pearson_r": round(float(r), 4), "p_value": p})
+    return pd.DataFrame(rows)
+
+
+# Continuous NRI/IDI: baseline -> extended 모델로 AEC 점수를 추가했을 때 예측확률이 실제로 재분류에
+# 기여하는지 평가(DeLong test는 discrimination만 보므로 별도 지표로 보강)
+def continuous_nri_idi(y: np.ndarray, score_old: np.ndarray, score_new: np.ndarray) -> dict:
+    event = y == 1
+    non_event = ~event
+    up, down = score_new > score_old, score_new < score_old
+    p_up_event = float(up[event].mean()) if event.sum() else float("nan")
+    p_down_event = float(down[event].mean()) if event.sum() else float("nan")
+    p_up_nonevent = float(up[non_event].mean()) if non_event.sum() else float("nan")
+    p_down_nonevent = float(down[non_event].mean()) if non_event.sum() else float("nan")
+    nri = (p_up_event - p_down_event) + (p_down_nonevent - p_up_nonevent)
+    idi = ((score_new[event].mean() - score_old[event].mean())
+           - (score_new[non_event].mean() - score_old[non_event].mean()))
+    return {"nri": float(nri), "idi": float(idi), "p_up_event": p_up_event, "p_down_event": p_down_event,
+            "p_up_nonevent": p_up_nonevent, "p_down_nonevent": p_down_nonevent}
 
 
 def write_sheets(path: Path, sheets: dict[str, pd.DataFrame]) -> None:
@@ -252,7 +394,12 @@ def plot_roc(feat: str, curves: dict[str, dict[str, np.ndarray]], stats_by_model
              out_path: Path, model_list: list[str]) -> None:
     colors = {"clinic4": "#898781", "clinic4_meanmAs": "#2a78d6", "clinic4_meanmAs_aec": "#1baf7a",
               "clinic4_vatsat": "#a35ad1", "clinic4_vatsat_aec": "#e2622e"}
-    fig, axes = plt.subplots(1, 2, figsize=(15, 6.5))
+    panel_w, panel_h = 7.5, 6.5
+    label_fs, tick_fs, legend_fs = scaled_fontsizes(panel_w, panel_h)
+    # 사용자 확인(2026-08-27): plot_auc_summary와 동일하게 비율 스케일값의 1.5배 적용
+    label_fs, tick_fs, legend_fs = label_fs * 1.5, tick_fs * 1.5, legend_fs * 1.5
+
+    fig, axes = plt.subplots(1, 2, figsize=(panel_w * 2, panel_h))
     for ax, cohort in zip(axes, ["internal", "external"]):
         y = curves[cohort]["y"]
         for model_name in model_list:
@@ -262,12 +409,13 @@ def plot_roc(feat: str, curves: dict[str, dict[str, np.ndarray]], stats_by_model
             ax.plot(fpr, tpr, color=colors[model_name], linewidth=1.8,
                      label=f"{MODEL_LABELS[model_name]} AUC={s['auc']:.3f}")
         ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1)
-        ax.set_title(f"{feat} ({cohort})", fontsize=16, fontweight="bold", color="#161616")
-        ax.set_xlabel("1 - Specificity")
-        ax.set_ylabel("Sensitivity")
+        ax.set_title(f"{feat} ({cohort})", fontsize=label_fs, fontweight="bold", color="#161616")
+        ax.set_xlabel("1 - Specificity", fontsize=label_fs)
+        ax.set_ylabel("Sensitivity", fontsize=label_fs)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1.02)
-        ax.legend(fontsize=10, loc="upper center", bbox_to_anchor=(0.5, -0.18), frameon=False)
+        ax.tick_params(labelsize=tick_fs)
+        ax.legend(fontsize=legend_fs, loc="upper center", bbox_to_anchor=(0.5, -0.35), frameon=False)
         ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -294,6 +442,14 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> Non
     df_fpca_ext.insert(0, "PatientID", meta_ext["PatientID"].to_numpy())
     write_sheets(output_dir / "fpca_scores.xlsx", {"internal": df_fpca_int, "external": df_fpca_ext})
 
+    corr_df = pd.concat([
+        compute_aec_vatsat_correlation(df_fpca_int, meta_int, fpca_cols, "internal"),
+        compute_aec_vatsat_correlation(df_fpca_ext, meta_ext, fpca_cols, "external"),
+    ], ignore_index=True)
+    corr_df.to_csv(output_dir / "aec_vatsat_correlation.csv", index=False)
+    print(f"Saved AEC score vs VAT/SAT correlation to {output_dir / 'aec_vatsat_correlation.csv'}")
+    print(corr_df.to_string(index=False))
+
     valid_features: list[str] = []
     skipped = []
     for feat in FEATURES:
@@ -310,7 +466,7 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> Non
             continue
         valid_features.append(feat)
 
-    summary_rows, delong_rows, predictions_rows = [], [], []
+    summary_rows, delong_rows, predictions_rows, nri_idi_rows = [], [], [], []
 
     for feat in valid_features:
         slug = FEATURES[feat]
@@ -356,11 +512,14 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> Non
             for cohort, meta_c, y, score in (("internal", meta_int_m, y_int, oof_proba),
                                               ("external", meta_ext_m, y_ext, ext_proba)):
                 auc = float(roc_auc_score(y, score))
+                # internal은 5-fold CV OOF 점추정만 쓰고, external frozen 평가에만 bootstrap CI를 붙인다
+                ci_lo, ci_hi = bootstrap_auc_ci(y, score) if cohort == "external" else (float("nan"), float("nan"))
                 cls_stats = classification_stats(y, score, threshold)
                 s = {"n": int(len(y)), "n_pos": int(y.sum()), "prevalence": float(y.mean()), "auc": auc,
-                     "threshold": threshold, **cls_stats}
+                     "auc_ci_lower": ci_lo, "auc_ci_upper": ci_hi, "threshold": threshold, **cls_stats}
+                ci_str = f" 95%CI=[{ci_lo:.3f}, {ci_hi:.3f}]" if cohort == "external" else ""
                 print(f"[{feat} / {model_name} / {cohort}] n={s['n']} n_pos={s['n_pos']} ({s['prevalence']:.1%}) "
-                      f"AUC={s['auc']:.3f} Se={s['sensitivity']:.3f} Sp={s['specificity']:.3f} Acc={s['accuracy']:.3f}")
+                      f"AUC={s['auc']:.3f}{ci_str} Se={s['sensitivity']:.3f} Sp={s['specificity']:.3f} Acc={s['accuracy']:.3f}")
                 summary_rows.append({"feature": feat, "model": model_name, "cohort": cohort, **s})
                 stats_by_model[model_name][cohort] = s
                 scores_by_model[model_name][cohort] = score
@@ -388,6 +547,12 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> Non
                                      "auc_extended": d["auc_b"], "auc_diff": d["diff"], "z": d["z"],
                                      "p_value": d["p_value"]})
 
+                nri_res = continuous_nri_idi(y, scores_by_model[baseline][cohort], scores_by_model[extended][cohort])
+                print(f"[{feat} / {cohort}] NRI {baseline}->{extended}: NRI={nri_res['nri']:+.4f} "
+                      f"IDI={nri_res['idi']:+.4f}")
+                nri_idi_rows.append({"feature": feat, "cohort": cohort, "baseline_model": baseline,
+                                      "extended_model": extended, **nri_res})
+
         write_sheets(feat_dir / f"{slug}_logistic_coefficients.xlsx", coef_sheets)
 
         curves = {
@@ -408,6 +573,10 @@ def run(meta_int: pd.DataFrame, meta_ext: pd.DataFrame, output_dir: Path) -> Non
     delong_df.to_csv(output_dir / "delong_auc_comparison.csv", index=False)
     print(f"Saved DeLong comparison to {output_dir / 'delong_auc_comparison.csv'}")
 
+    nri_idi_df = pd.DataFrame(nri_idi_rows).round(4)
+    nri_idi_df.to_csv(output_dir / "nri_idi_summary.csv", index=False)
+    print(f"Saved NRI/IDI summary to {output_dir / 'nri_idi_summary.csv'}")
+
     predictions = pd.concat(predictions_rows, ignore_index=True)
     predictions.to_csv(output_dir / "predictions.csv", index=False)
     print(f"Saved per-patient predictions to {output_dir / 'predictions.csv'}")
@@ -425,7 +594,13 @@ def plot_auc_summary(summary: pd.DataFrame, out_path: Path, model_list: list[str
     x = np.arange(len(features))
     width = 0.8 / len(model_list)
 
-    fig, axes = plt.subplots(1, 2, figsize=(8 * len(features) / 2 + 4, 6))
+    panel_w, panel_h = 2 * len(features) + 2, 6
+    label_fs, tick_fs, legend_fs = scaled_fontsizes(panel_w, panel_h)
+    # 사용자 확인(2026-08-27): logistic_regression_auc_summary_*.png는 비율 스케일값 대비 폰트가 2배 더 커야
+    # 하되(1차 확인), 2배 적용 결과에서 다시 0.75배로 축소 요청(2026-08-27) -> 최종 배율 2*0.75=1.5
+    label_fs, tick_fs, legend_fs = label_fs * 1.5, tick_fs * 1.5, legend_fs * 1.5
+
+    fig, axes = plt.subplots(1, 2, figsize=(panel_w * 2, panel_h))
     for ax, cohort in zip(axes, ["internal", "external"]):
         sub = summary[summary["cohort"] == cohort]
         for i, model_name in enumerate(model_list):
@@ -434,15 +609,15 @@ def plot_auc_summary(summary: pd.DataFrame, out_path: Path, model_list: list[str
             ax.bar(x + offset, rows["auc"], width, label=MODEL_LABELS[model_name], color=colors[model_name])
         ax.axhline(0.5, color="gray", linestyle="--", linewidth=1)
         ax.set_xticks(x)
-        ax.set_xticklabels(slugs, fontsize=18)
+        ax.set_xticklabels(slugs, fontsize=tick_fs)
         ax.set_ylim(0.5, 1.0)
-        ax.set_title(cohort, fontsize=18, fontweight="bold", color="#161616")
-        ax.set_ylabel("AUC", fontsize=18)
-        ax.tick_params(axis="y", labelsize=16)
+        ax.set_title(cohort, fontsize=label_fs, fontweight="bold", color="#161616")
+        ax.set_ylabel("AUC", fontsize=label_fs)
+        ax.tick_params(axis="y", labelsize=tick_fs)
         ax.grid(alpha=0.3, axis="y")
 
     handles, legend_labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, legend_labels, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.15), fontsize=14,
+    fig.legend(handles, legend_labels, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.15), fontsize=legend_fs,
                frameon=False)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -491,6 +666,9 @@ def main() -> None:
     meta_int = meta_int[mask_int].reset_index(drop=True)
     meta_ext = meta_ext[mask_ext].reset_index(drop=True)
     print(f"Final cohort: internal n={len(meta_int)}, external n={len(meta_ext)}")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    build_table1(meta_int, meta_ext, OUTPUT_DIR)
 
     run(meta_int, meta_ext, OUTPUT_DIR)
 
