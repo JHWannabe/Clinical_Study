@@ -1,0 +1,7 @@
+feature,cohort,n_pos,n_neg
+HTN,internal,385,874
+HTN,external,507,616
+DM,internal,232,1027
+DM,external,335,788
+CKD,internal,105,1154
+CKD,external,188,935
