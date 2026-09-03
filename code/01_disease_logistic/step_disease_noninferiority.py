@@ -134,7 +134,7 @@ def plot_forest(res: pd.DataFrame, out_path: Path) -> None:
     ax.tick_params(axis="x", labelsize=18)
     ax.set_xlim(-0.05, 0.05)
     ax.grid(alpha=0.3, axis="x")
-    ax.legend(fontsize=18, loc="lower right", frameon=False)
+    ax.legend(fontsize=18, loc="upper right", frameon=False)  # HTN 행의 CI 상한(+0.014)보다 오른쪽 여백에 배치해 막대와 겹치지 않게
     ax.set_title("Non-inferiority of AEC model vs segmentation-based VAT/SAT model", fontsize=24, fontweight="bold")
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
