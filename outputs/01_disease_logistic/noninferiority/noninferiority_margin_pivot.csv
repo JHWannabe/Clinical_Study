@@ -1,0 +1,7 @@
+feature,cohort,0.01,0.015,0.02,0.03,0.05
+CKD,external,True,True,True,True,True
+CKD,internal,False,True,True,True,True
+DM,external,False,True,True,True,True
+DM,internal,True,True,True,True,True
+HTN,external,False,True,True,True,True
+HTN,internal,False,False,True,True,True
