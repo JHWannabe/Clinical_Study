@@ -1,0 +1,31 @@
+[환경] torch=2.11.0+cu128 device=cuda model=image_lineplot_cnn
+internal n=1259, external n=1123
+Saved sample images to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\sample_lineplot_images.png
+[baseline/HTN] clinic4 internal OOF AUC=0.7953
+[HTN] image_lineplot_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=385)
+[HTN] image_lineplot_cnn internal OOF AUC=0.7936 (delta=-0.0017 vs clinic4)
+[HTN] image_lineplot_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\loss_curve_HTN.png
+[HTN external, 1회 동결평가] clinic4 AUC=0.7177 95%CI=[0.6874, 0.7489] / image_lineplot_cnn AUC=0.7278 95%CI=[0.6985, 0.7586]
+[image_lineplot_cnn vs clinic4 / HTN / internal] delta_auc=-0.0017 z=-0.5491 p=0.5829
+[image_lineplot_cnn vs clinic4 / HTN / external] delta_auc=+0.0101 z=3.6292 p=0.0003
+[baseline/DM] clinic4 internal OOF AUC=0.7186
+[DM] image_lineplot_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=232)
+[DM] image_lineplot_cnn internal OOF AUC=0.7145 (delta=-0.0040 vs clinic4)
+[DM] image_lineplot_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\loss_curve_DM.png
+[DM external, 1회 동결평가] clinic4 AUC=0.6655 95%CI=[0.6324, 0.6991] / image_lineplot_cnn AUC=0.6650 95%CI=[0.6309, 0.6994]
+[image_lineplot_cnn vs clinic4 / DM / internal] delta_auc=-0.0040 z=-0.6540 p=0.5131
+[image_lineplot_cnn vs clinic4 / DM / external] delta_auc=-0.0005 z=-0.1326 p=0.8945
+[baseline/CKD] clinic4 internal OOF AUC=0.7661
+[CKD] image_lineplot_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=105)
+[CKD] image_lineplot_cnn internal OOF AUC=0.7533 (delta=-0.0128 vs clinic4)
+[CKD] image_lineplot_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\loss_curve_CKD.png
+[CKD external, 1회 동결평가] clinic4 AUC=0.6156 95%CI=[0.5713, 0.6618] / image_lineplot_cnn AUC=0.6154 95%CI=[0.5700, 0.6615]
+[image_lineplot_cnn vs clinic4 / CKD / internal] delta_auc=-0.0128 z=-1.1097 p=0.2671
+[image_lineplot_cnn vs clinic4 / CKD / external] delta_auc=-0.0002 z=-0.0381 p=0.9696
+Saved classification summary to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\classification_summary.csv
+Saved DeLong comparison to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\delong_vs_clinic4.csv
+Saved comparison plot to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot\classification_auc_comparison.png
+[image_lineplot_cnn] 결과 저장 완료: C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_lineplot

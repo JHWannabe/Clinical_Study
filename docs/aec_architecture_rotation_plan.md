@@ -11,7 +11,7 @@
 - 종료 기준: internal delta ≥ +0.02 AUC(3질환 중 1개라도) → "유망"으로 표시, 다음날 세부 튜닝으로 이어감.
   미달이면 다음 계열로 이동
 - 백본 curve 전처리는 raw 또는 patient-wise z-score만 사용([[feedback_aec_preprocessing_methods]])
-- 코드는 `code/aec_fusion_common.py`의 `run_fusion_pipeline`을 재사용(데이터 로딩·그리드서치·DeLong·plot 공통화)
+- 코드는 `code/03_aec_deep_learning/fusion/aec_fusion_common.py`의 `run_fusion_pipeline`을 재사용(데이터 로딩·그리드서치·DeLong·plot 공통화)
 
 ## 사전 참고 근거(이미 확인된 것)
 - CNN GAP + concat/gated/attnpool/crossattn 4종 fusion: 24개 DeLong 중 Bonferroni 통과 0건
@@ -26,16 +26,16 @@
 
 | Day | 아키텍처 | 핵심 아이디어 | 파일 | 상태 |
 |---|---|---|---|---|
-| 1 | BiLSTM/GRU curve encoder | 시퀀스 순환 구조로 장거리 의존성 포착 | `code/aec_arch_day1_rnn.py` | 완료(목표 미달) |
-| 2 | Transformer encoder (self-attention) | positional encoding + multi-head attention, CLS/mean pooling | `code/aec_arch_day2_transformer.py` | 완료(목표 미달) |
-| 3 | TCN (dilated causal conv) | dilation 1/2/4/8로 receptive field 지수적 확장 | `code/aec_arch_day3_tcn.py` | 완료(목표 미달) |
-| 4 | SE-CNN (channel/segment attention) | 기존 CNN에 Squeeze-Excitation 추가, 구간별 중요도 자동 가중 | `code/aec_arch_day4_secnn.py` | 완료(목표 미달) |
-| 5 | Multi-scale Inception-1D | kernel 3/7/15/31 병렬 branch concat | `code/aec_arch_day5_inception.py` | 완료(목표 미달) |
-| 6 | Self-supervised pretrain → fine-tune | curve autoencoder 사전학습 후 encoder만 fine-tune | `code/aec_arch_day6_ssl_pretrain.py` | 완료(목표 미달) |
-| 7 | Residual-target learning | clinic4 logistic의 residual(잔차 logit)을 curve 모델이 예측 | `code/aec_arch_day7_residual_target.py` | 완료(목표 미달) |
-| 8 | Multi-task 공유 인코더 | curve 인코더 하나로 HTN+DM+CKD 동시 학습, task-specific head 분리 | `code/aec_arch_day8_multitask.py` | 완료(목표 미달) |
-| 9 | Late-fusion stacking | curve-only NN과 clinic4 logistic을 독립 학습 후 meta-logistic으로 결합 | `code/aec_arch_day9_stacking.py` | 완료(목표 미달) |
-| 10 | 주파수영역 특징 | FFT/DWT로 곡선을 주파수 성분화 후 소형 MLP + clinic4 concat | `code/aec_arch_day10_frequency.py` | 완료(목표 미달) |
+| 1 | BiLSTM/GRU curve encoder | 시퀀스 순환 구조로 장거리 의존성 포착 | `code/03_aec_deep_learning/arch/aec_arch_day1_rnn.py` | 완료(목표 미달) |
+| 2 | Transformer encoder (self-attention) | positional encoding + multi-head attention, CLS/mean pooling | `code/03_aec_deep_learning/arch/aec_arch_day2_transformer.py` | 완료(목표 미달) |
+| 3 | TCN (dilated causal conv) | dilation 1/2/4/8로 receptive field 지수적 확장 | `code/03_aec_deep_learning/arch/aec_arch_day3_tcn.py` | 완료(목표 미달) |
+| 4 | SE-CNN (channel/segment attention) | 기존 CNN에 Squeeze-Excitation 추가, 구간별 중요도 자동 가중 | `code/03_aec_deep_learning/arch/aec_arch_day4_secnn.py` | 완료(목표 미달) |
+| 5 | Multi-scale Inception-1D | kernel 3/7/15/31 병렬 branch concat | `code/03_aec_deep_learning/arch/aec_arch_day5_inception.py` | 완료(목표 미달) |
+| 6 | Self-supervised pretrain → fine-tune | curve autoencoder 사전학습 후 encoder만 fine-tune | `code/03_aec_deep_learning/arch/aec_arch_day6_ssl_pretrain.py` | 완료(목표 미달) |
+| 7 | Residual-target learning | clinic4 logistic의 residual(잔차 logit)을 curve 모델이 예측 | `code/03_aec_deep_learning/arch/aec_arch_day7_residual_target.py` | 완료(목표 미달) |
+| 8 | Multi-task 공유 인코더 | curve 인코더 하나로 HTN+DM+CKD 동시 학습, task-specific head 분리 | `code/03_aec_deep_learning/arch/aec_arch_day8_multitask.py` | 완료(목표 미달) |
+| 9 | Late-fusion stacking | curve-only NN과 clinic4 logistic을 독립 학습 후 meta-logistic으로 결합 | `code/03_aec_deep_learning/arch/aec_arch_day9_stacking.py` | 완료(목표 미달) |
+| 10 | 주파수영역 특징 | FFT/DWT로 곡선을 주파수 성분화 후 소형 MLP + clinic4 concat | `code/03_aec_deep_learning/arch/aec_arch_day10_frequency.py` | 완료(목표 미달) |
 
 ## 10일 로테이션 결론(2026-09-01 완료)
 

@@ -1,0 +1,30 @@
+[환경] torch=2.11.0+cu128 device=cuda model=image_gaf_cnn
+internal n=1259, external n=1123
+[baseline/HTN] clinic4 internal OOF AUC=0.7953
+[HTN] image_gaf_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=385)
+[HTN] image_gaf_cnn internal OOF AUC=0.7984 (delta=+0.0031 vs clinic4)
+[HTN] image_gaf_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\loss_curve_HTN.png
+[HTN external, 1회 동결평가] clinic4 AUC=0.7177 95%CI=[0.6874, 0.7489] / image_gaf_cnn AUC=0.7245 95%CI=[0.6953, 0.7556]
+[image_gaf_cnn vs clinic4 / HTN / internal] delta_auc=+0.0031 z=0.5429 p=0.5872
+[image_gaf_cnn vs clinic4 / HTN / external] delta_auc=+0.0068 z=1.7804 p=0.0750
+[baseline/DM] clinic4 internal OOF AUC=0.7186
+[DM] image_gaf_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=232)
+[DM] image_gaf_cnn internal OOF AUC=0.7206 (delta=+0.0020 vs clinic4)
+[DM] image_gaf_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\loss_curve_DM.png
+[DM external, 1회 동결평가] clinic4 AUC=0.6655 95%CI=[0.6324, 0.6991] / image_gaf_cnn AUC=0.6633 95%CI=[0.6300, 0.6980]
+[image_gaf_cnn vs clinic4 / DM / internal] delta_auc=+0.0020 z=0.2864 p=0.7746
+[image_gaf_cnn vs clinic4 / DM / external] delta_auc=-0.0021 z=-0.5098 p=0.6102
+[baseline/CKD] clinic4 internal OOF AUC=0.7661
+[CKD] image_gaf_cnn internal 5-fold OOF 학습 시작 (n=1259, n_pos=105)
+[CKD] image_gaf_cnn internal OOF AUC=0.7316 (delta=-0.0344 vs clinic4)
+[CKD] image_gaf_cnn external 동결평가 학습 시작
+Saved loss curve to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\loss_curve_CKD.png
+[CKD external, 1회 동결평가] clinic4 AUC=0.6156 95%CI=[0.5713, 0.6618] / image_gaf_cnn AUC=0.6131 95%CI=[0.5679, 0.6588]
+[image_gaf_cnn vs clinic4 / CKD / internal] delta_auc=-0.0344 z=-2.1102 p=0.0348
+[image_gaf_cnn vs clinic4 / CKD / external] delta_auc=-0.0025 z=-0.4029 p=0.6870
+Saved classification summary to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\classification_summary.csv
+Saved DeLong comparison to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\delong_vs_clinic4.csv
+Saved comparison plot to C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf\classification_auc_comparison.png
+[image_gaf_cnn] 결과 저장 완료: C:\Users\jhjun\OneDrive\Desktop\Clinical_Study\outputs\arch\fusion_image_gaf
