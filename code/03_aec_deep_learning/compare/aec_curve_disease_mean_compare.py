@@ -56,6 +56,27 @@ def patient_zscore(curve: np.ndarray) -> np.ndarray:
     return (curve - mean) / std
 
 
+N_PERMUTATIONS = 20000
+PERM_SEED = 20260709
+
+
+# 곡선 전체(128포인트)를 하나의 벡터로 보고 두 그룹 평균곡선 사이의 L2^2 거리를 단일 통계량으로 삼는
+# permutation test([[feedback_aec_curve_wholistic]] — 슬라이스별 t-test 대신 곡선 전체 단위 검정).
+# 라벨을 무작위로 섞어 귀무분포를 만들고, 관측 통계량이 귀무분포에서 몇 %ile인지로 p-value 산출
+def curve_level_permutation_test(pos: np.ndarray, neg: np.ndarray, n_perm: int = N_PERMUTATIONS,
+                                   seed: int = PERM_SEED) -> tuple[float, float]:
+    rng = np.random.default_rng(seed)
+    obs_stat = float(np.sum((pos.mean(axis=0) - neg.mean(axis=0)) ** 2))
+    pooled = np.vstack([pos, neg])
+    n_pos, n_total = pos.shape[0], pooled.shape[0]
+    perm_stats = np.empty(n_perm)
+    for i in range(n_perm):
+        idx = rng.permutation(n_total)
+        perm_stats[i] = np.sum((pooled[idx[:n_pos]].mean(axis=0) - pooled[idx[n_pos:]].mean(axis=0)) ** 2)
+    p_value = (np.sum(perm_stats >= obs_stat) + 1) / (n_perm + 1)
+    return obs_stat, p_value
+
+
 def group_stats(curve_norm: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     mean = curve_norm.mean(axis=0)
     std = curve_norm.std(axis=0, ddof=1)
@@ -96,6 +117,16 @@ def main() -> None:
             n_pos, n_neg = group_data["pos"].shape[0], group_data["neg"].shape[0]
             print(f"[{feature}/{cohort_name}] 있음 n={n_pos}, 없음 n={n_neg}")
             stats_rows.append({"feature": feature, "cohort": cohort_name, "n_pos": n_pos, "n_neg": n_neg})
+
+    perm_rows: list[dict] = []
+    for (feature, cohort_name), group_data in curves_by_panel.items():
+        obs_stat, p_value = curve_level_permutation_test(group_data["pos"], group_data["neg"])
+        perm_rows.append({"feature": feature, "cohort": cohort_name, "l2_stat": obs_stat,
+                           "n_perm": N_PERMUTATIONS, "p_value": p_value})
+        print(f"[permutation test] {feature}/{cohort_name}: L2^2={obs_stat:.4f}, p={p_value:.4f}")
+    perm_df = pd.DataFrame(perm_rows)
+    perm_df.to_csv(OUTPUT_DIR / "curve_whole_permutation_test.csv", index=False)
+    print(f"Saved curve-level permutation test to {OUTPUT_DIR / 'curve_whole_permutation_test.csv'}")
 
     summary = pd.DataFrame(summary_rows)
     summary.to_csv(OUTPUT_DIR / "aec_mean_curve_by_slice.csv", index=False)

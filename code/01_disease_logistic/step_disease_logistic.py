@@ -606,12 +606,21 @@ def plot_auc_summary(summary: pd.DataFrame, out_path: Path, model_list: list[str
         for i, model_name in enumerate(model_list):
             rows = sub[sub["model"] == model_name].set_index("feature").reindex(features)
             offset = (i - (len(model_list) - 1) / 2) * width
-            ax.bar(x + offset, rows["auc"], width, label=MODEL_LABELS[model_name], color=colors[model_name])
+            # external은 bootstrap 95% CI(auc_ci_lower/upper)를 오차막대로 표시, internal은 OOF 점추정치라
+            # CI가 없어(NaN) 오차막대 생략([[project_pvalue_test_glossary]] bootstrap CI와 동일 정의)
+            if cohort == "external" and rows["auc_ci_lower"].notna().all():
+                yerr = np.vstack([rows["auc"] - rows["auc_ci_lower"], rows["auc_ci_upper"] - rows["auc"]])
+                ax.bar(x + offset, rows["auc"], width, yerr=yerr, capsize=3,
+                       error_kw={"elinewidth": 1.3, "ecolor": "#161616"},
+                       label=MODEL_LABELS[model_name], color=colors[model_name])
+            else:
+                ax.bar(x + offset, rows["auc"], width, label=MODEL_LABELS[model_name], color=colors[model_name])
         ax.axhline(0.5, color="gray", linestyle="--", linewidth=1)
         ax.set_xticks(x)
         ax.set_xticklabels(slugs, fontsize=tick_fs)
         ax.set_ylim(0.5, 1.0)
-        ax.set_title(cohort, fontsize=label_fs, fontweight="bold", color="#161616")
+        title = f"{cohort} (95% CI)" if cohort == "external" else cohort
+        ax.set_title(title, fontsize=label_fs, fontweight="bold", color="#161616")
         ax.set_ylabel("AUC", fontsize=label_fs)
         ax.tick_params(axis="y", labelsize=tick_fs)
         ax.grid(alpha=0.3, axis="y")
