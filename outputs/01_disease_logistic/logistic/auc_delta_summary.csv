@@ -1,7 +1,0 @@
-feature,cohort,auc_clinic4,auc_clinic4_meanmAs,auc_clinic4_meanmAs_aec,auc_clinic4_vatsat,auc_clinic4_vatsat_aec,delta_auc_clinic4_meanmAs_minus_clinic4,delong_z_clinic4_meanmAs_minus_clinic4,delong_p_clinic4_meanmAs_minus_clinic4,delta_auc_clinic4_meanmAs_aec_minus_clinic4_meanmAs,delong_z_clinic4_meanmAs_aec_minus_clinic4_meanmAs,delong_p_clinic4_meanmAs_aec_minus_clinic4_meanmAs,delta_auc_clinic4_vatsat_minus_clinic4,delong_z_clinic4_vatsat_minus_clinic4,delong_p_clinic4_vatsat_minus_clinic4,delta_auc_clinic4_vatsat_aec_minus_clinic4_vatsat,delong_z_clinic4_vatsat_aec_minus_clinic4_vatsat,delong_p_clinic4_vatsat_aec_minus_clinic4_vatsat
-HTN,internal,0.7945,0.7965,0.8024,0.8106,0.8103,0.0019,0.7488,0.454,0.0059,1.4184,0.1561,0.0161,2.7775,0.0055,-0.0003,-0.1106,0.9119
-HTN,external,0.7177,0.7184,0.7296,0.7299,0.7334,0.0007,0.2087,0.8347,0.0113,2.334,0.0196,0.0123,1.7142,0.0865,0.0035,1.1247,0.2607
-DM,internal,0.7217,0.7206,0.7405,0.7231,0.7348,-0.001,-1.7907,0.0733,0.0199,2.5246,0.0116,0.0014,0.2281,0.8196,0.0117,1.9599,0.05
-DM,external,0.6655,0.6654,0.6811,0.6769,0.6856,-0.0,-0.0589,0.953,0.0157,1.8139,0.0697,0.0114,1.589,0.1121,0.0087,1.3366,0.1813
-CKD,internal,0.7682,0.7677,0.7716,0.7697,0.7728,-0.0005,-0.2707,0.7866,0.0039,0.5356,0.5923,0.0016,0.2764,0.7822,0.0031,0.4445,0.6567
-CKD,external,0.6156,0.6141,0.6297,0.617,0.6265,-0.0015,-0.9165,0.3594,0.0156,2.6967,0.007,0.0014,0.2702,0.787,0.0095,1.7594,0.0785

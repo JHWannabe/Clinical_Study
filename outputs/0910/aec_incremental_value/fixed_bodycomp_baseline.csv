@@ -1,0 +1,4 @@
+feature,fixed_bodycomp_model,fixed_bodycomp_label
+HTN,clinic4_lama_tama_ratio,clinic4 + LAMA/TAMA
+DM,clinic4_lama,clinic4 + LAMA
+CKD,clinic4_lama_tama_ratio,clinic4 + LAMA/TAMA
