@@ -1,0 +1,33 @@
+1D CNN 의료 데이터 레퍼런스 - PDF 저장 상태 (260918)
+원본 조사: docs/레퍼런스/260903_1D_CNN_의료데이터_레퍼런스_조사.md
+
+[저장 완료 - 이 폴더]
+01_Kachuee_ECG_Heartbeat_Classification_arXiv1805.00794.pdf
+   Kachuee et al., IEEE ICHI 2018 (arXiv 1805.00794)
+03_ECG_1D_ResNet_PLOSONE.pdf
+   "ECG classification using 1-D convolutional deep residual neural network", PLOS ONE 2023
+04_SelfONN_RealTime_PatientSpecific_ECG_arXiv2110.02215.pdf
+   "Real-Time Patient-Specific ECG Classification by 1D Self-Operational Neural Networks", arXiv 2021
+09_DoesDeepLearningReallyOutperform_arXiv2211.06034.pdf
+   "Does Deep Learning REALLY Outperform Non-deep Machine Learning..." arXiv 2022
+
+[자동 다운로드 실패 - 수동 필요]
+02_Li_Zhang_ECG_1DCNN_IEEE_Healthcom2017
+   Li, Zhang, Zhang, Wei, IEEE Healthcom 2017 — IEEE Xplore 유료, 연세대 프록시 로그인 필요
+   https://ieeexplore.ieee.org/document/8210784/
+
+05/06_MDPI_Review_Information_2078-2489_16_3_195
+   "Deep Convolutional Neural Networks in Medical Image Analysis: A Review" (Information, MDPI 2025)
+   오픈액세스이나 MDPI가 자동화 요청을 차단(403) — 브라우저로 직접 다운로드 필요
+   https://www.mdpi.com/2078-2489/16/3/195/pdf
+   (5, 6번 항목은 이 리뷰 안에서 인용된 사례이며 원논문 개별 링크 미확인 상태)
+
+07_DeepLearning_PhysiologicalSignal_Survey_Sensors_2020
+   "Deep Learning in Physiological Signal Data: A Survey" (Sensors, MDPI 2020)
+   오픈액세스이나 MDPI가 자동화 요청을 차단(403) — 브라우저로 직접 다운로드 필요
+   https://www.mdpi.com/1424-8220/20/4/969 (PMC: https://pmc.ncbi.nlm.nih.gov/articles/PMC7071412/)
+
+08_Recognizing_diseases_DeepCNN_LSTM_AppliedIntelligence2021
+   "Recognizing diseases with multivariate physiological signals by a DeepCNN-LSTM network"
+   Springer 유료, 연세대 프록시 로그인 필요
+   https://link.springer.com/article/10.1007/s10489-021-02309-2
