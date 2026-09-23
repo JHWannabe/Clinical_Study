@@ -1,0 +1,9 @@
+disease,cohort,fpca_only,fpca_ratio,ratio_only
+CKD,gangnam,0.791,0.794,0.807
+CKD,sinchon,0.603,0.606,0.624
+DM,gangnam,0.777,0.781,0.762
+DM,new10000,0.642,0.645,0.640
+DM,sinchon,0.682,0.680,0.685
+HTN,gangnam,0.821,0.821,0.816
+HTN,new10000,0.661,0.661,0.663
+HTN,sinchon,0.729,0.729,0.728

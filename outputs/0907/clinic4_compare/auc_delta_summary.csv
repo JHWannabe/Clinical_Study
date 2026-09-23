@@ -1,7 +1,0 @@
-feature,cohort,auc_clinic4,auc_clinic4_fpca3,auc_clinic4_uplow_ratio,delta_auc_clinic4_fpca3_minus_clinic4,delong_z_clinic4_fpca3_minus_clinic4,delong_p_clinic4_fpca3_minus_clinic4,delta_auc_clinic4_uplow_ratio_minus_clinic4,delong_z_clinic4_uplow_ratio_minus_clinic4,delong_p_clinic4_uplow_ratio_minus_clinic4,delta_auc_clinic4_uplow_ratio_minus_clinic4_fpca3,delong_z_clinic4_uplow_ratio_minus_clinic4_fpca3,delong_p_clinic4_uplow_ratio_minus_clinic4_fpca3
-HTN,internal,0.7941,0.8032,0.8001,0.0091,1.7523,0.0797,0.0061,1.3199,0.1869,-0.0031,-1.2999,0.1936
-HTN,external,0.7194,0.7325,0.7294,0.0132,2.0489,0.0405,0.01,1.4705,0.1414,-0.0031,-0.8444,0.3985
-DM,internal,0.7216,0.7405,0.737,0.0188,2.3987,0.0165,0.0154,2.2271,0.0259,-0.0034,-0.8243,0.4098
-DM,external,0.6655,0.6808,0.677,0.0154,1.7967,0.0724,0.0116,1.2111,0.2259,-0.0038,-0.8002,0.4236
-CKD,internal,0.7682,0.772,0.7725,0.0038,0.5568,0.5777,0.0043,0.7954,0.4264,0.0006,0.1876,0.8512
-CKD,external,0.6155,0.6293,0.6331,0.0138,2.4574,0.014,0.0175,2.8312,0.0046,0.0038,1.2629,0.2066

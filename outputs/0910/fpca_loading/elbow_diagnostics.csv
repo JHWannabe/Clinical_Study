@@ -1,8 +1,0 @@
-curve,elbow_n,fixed_n,cum_var_at_fixed_n,cum_var_at_elbow_n,matches_fixed
-AEC,3,3,0.9738,0.9738,True
-VAT,2,3,0.9403,0.9147,False
-SAT,2,3,0.9295,0.9026,False
-IMATA,3,3,0.7878,0.7878,True
-NAMA,2,3,0.9341,0.8977,False
-LAMA,2,3,0.94,0.9188,False
-TAMA,2,3,0.9261,0.8833,False
