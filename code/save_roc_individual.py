@@ -37,6 +37,7 @@ MODEL_SETS = {
 }
 
 BASELINE_MODEL = "baseline"  # 이 모델 대비 나머지 모델의 AUC 유의성을 검정(DeLong)
+COHORTS = ("gangnam", "sinchon")  # 비교 대상 코호트 - new10000은 제외(predictions.xlsx에는 남아 있음)
 
 
 # baseline과 모델 하나를 patient_id로 짝지어(paired) DeLong AUC 차이 검정 -> p-value
@@ -101,6 +102,7 @@ def run_model_set(model_names: list[str], out_dir: Path) -> None:
             continue
         frames.append(df.assign(model=model))
     all_predictions = pd.concat(frames, ignore_index=True)
+    all_predictions = all_predictions[all_predictions["cohort"].isin(COHORTS)]
 
     n_saved = 0
     summary_rows = []
