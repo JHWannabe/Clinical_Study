@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-# clinic4 파이프라인 전체를 한 번에 돌리는 진입점. 모델 스크립트를 순서대로 실행한 뒤 보고용 pptx를 다시 만든다.
-# 병렬 실행 금지 - save_sheet가 read-modify-write라 두 스크립트가 같은 xlsx를 동시에 쓰면 시트가 통째로 날아가고,
-# 빌더가 반쯤 쓰인 xlsx를 읽으면 BadZipFile로 죽는다.
+# 덱(docs/261002_*.pptx)에 쓰이는 분석·그림을 한 번에 다시 만드는 진입점. 스크립트를 순서대로 실행한다.
+# 병렬 실행 금지 - save_sheet가 read-modify-write라 두 스크립트가 같은 xlsx를 동시에 쓰면 시트가 통째로 날아간다.
 #
 #   python code/run_all.py            # 전체 실행
 #   python code/run_all.py aec        # 이름에 'aec'가 들어간 스크립트만
-#   python code/run_all.py --pptx     # 모델 재실행 없이 pptx만 다시 생성
-#   python code/run_all.py --no-pptx  # 모델만 실행하고 pptx는 건너뜀
 
 import subprocess
 import sys
@@ -18,19 +15,16 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 CODE_DIR = Path(__file__).resolve().parent
 
-# 실행 순서(baseline이 먼저여야 나머지가 비교 대상으로 삼는 시트가 생김)
+# 실행 순서(앞 단계 산출물을 뒤 단계가 읽는다). 이전 hold-out 방식 스크립트는 _archive/에 보관
 MODEL_SCRIPTS = [
-    "clinic4_data_distribution.py",
-    "clinic4_logistic_regression.py",
-    "clinic4_aec_logistic_regression.py",
-    "clinic4_aec_vat_logistic.py",
-    "clinic4_aec_lama_logistic.py",
-    "clinic4_aec_nama_logistic.py",
-    "clinic4_aec_bodycomp_logistic.py",
-    "clinic4_bodycomp_logistic.py",
-    "save_roc_individual.py",
+    "clinic4_data_distribution.py",       # Table 1
+    "clinic4_5fold_unbalanced.py",        # Table 3 성능·DeLong, 예측값 저장(predictions_5fold_unbalanced.xlsx)
+    "clinic4_calibration_plot.py",        # Calibration plot
+    "clinic4_delta_auc_plot.py",          # Figure 1 (ΔAUC)
+    "clinic4_fpca_recovered_5fold.py",    # Figure 2 (AEC 위치별 기여도)
+    "seminar_figures.py",                 # AEC 실제 데이터 그림, FPCA 개념
+    "seminar_figures2.py",                # 연구 설계도, elbow, FPCA 체성분 역변환, Odds Ratio forest
 ]
-REPORT_SCRIPT = "build_pptx_report.py"
 
 
 # 스크립트 하나를 실행하고 소요 시간을 출력. 실패하면 그 자리에서 멈춘다(뒤 결과가 옛 시트와 섞이지 않게)
@@ -45,13 +39,7 @@ def run(script: str) -> None:
 
 
 def main(argv: list[str]) -> None:
-    if "--pptx" in argv:
-        scripts = [REPORT_SCRIPT]
-    else:
-        keywords = [a for a in argv if not a.startswith("--")]
-        scripts = [s for s in MODEL_SCRIPTS if not keywords or any(k in s for k in keywords)]
-        if "--no-pptx" not in argv:
-            scripts.append(REPORT_SCRIPT)
+    scripts = [s for s in MODEL_SCRIPTS if not argv or any(k in s for k in argv)]
 
     started = time.time()
     for script in scripts:

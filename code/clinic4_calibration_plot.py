@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# outputs/clinic4/predictions_5fold.xlsx(clinic4_5fold_cv.py 산출물)의 patient-level 예측으로 질병별
+# outputs/clinic4/predictions_5fold_unbalanced.xlsx(clinic4_5fold_unbalanced.py 산출물)의 patient-level 예측으로 질병별
 # calibration plot을 그린다. docs/261002_개인연구미팅자료.pptx 슬라이드 8(Figure 2)에 이미 박혀 있던
 # Best(+AEC+체성분) 단독 그림과 같은 스타일(1x3 subplot, 5 quantile bin, gangnam=실선/sinchon=점선,
 # 회색 점선 대각선 "Perfect calibration")을 그대로 유지한 채, Baseline과 Best를 한 그림에 4선으로
@@ -21,7 +21,7 @@ from clinic4_logistic_regression import CLINIC4_DIR, DISEASES, f3
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔 cp949가 한글을 인코딩 못 해 print에서 죽는 것 방지
 
-PRED_XLSX = CLINIC4_DIR / "predictions_5fold.xlsx"
+PRED_XLSX = CLINIC4_DIR / "predictions_5fold_unbalanced.xlsx"  # 덱 분석과 같은 전체 표본(n=1,260) 예측값
 DISEASE_LABEL = {"HTN": "고혈압(HTN)", "DM": "당뇨병(DM)", "CKD": "만성신장질환(CKD)"}
 N_BINS = 5
 # model -> (파일명, legend/title에 쓸 이름)
