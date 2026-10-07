@@ -33,6 +33,8 @@ from clinic4_landmark_vat_auc import DATA_DIR, DISEASES, LM, load_cohort
 from delong_utils import bh_fdr, delong_paired_auc_test
 from scipy.stats import mannwhitneyu
 
+TARGETS = DISEASES + ["전체"]  # "전체" = 세 질환 중 하나라도 있는 환자(질환군) vs 정상
+pos_label = lambda d: "질환 있음(하나 이상)" if d == "전체" else f"{d} 단독"
 LMN = [a.replace("_center", "") for a in LM]
 TIS = ["VAT", "SAT", "TAMA", "AEC"]
 SEED = 111  # split seed 고정 (UI에서 변경 불가)
@@ -44,6 +46,7 @@ DEFAULT_FEATS = {
     "HTN": ["VAT@S1", "VAT@T11/VAT@L5", "AEC@L5/AEC@S1", "AEC@L3/AEC@inferior_pubic_margin", "TAMA/(VAT+SAT)@L2", "SAT@femoral_head/SAT@inferior_pubic_margin"],
     "DM": ["SAT@T10/SAT@T11", "TAMA@L4/TAMA@femoral_head", "AEC@T12/AEC@L1", "VAT@T10/VAT@T12"],
     "CKD": ["SAT@T11/SAT@L2", "SAT@S1/SAT@femoral_head", "SAT@T12/SAT@L3"],
+    "전체": ["SAT@liver_dome", "AEC@L1"],
 }
 
 
@@ -61,6 +64,7 @@ def load(c: str) -> pd.DataFrame:
     aec = pd.read_excel(path, sheet_name="aec_total").set_index("PatientID").filter(regex=r"^aec_\d+$").loc[df.PatientID].to_numpy(float)
     assert df.PatientID.is_unique, "환자 중복: 행 단위 분할은 누수 위험"
     df["Sex(M)"] = (df.PatientSex.astype(str).str.upper() == "M").astype(float)
+    df["전체"] = (df[DISEASES] != 0).any(axis=1).astype(int)  # 세 질환 중 하나라도 있음
     for a, n in zip(LM, LMN):
         df[f"AEC@{n}"] = aec[np.arange(len(df)), lm[f"{a}_slice"].to_numpy(int) - 1]  # 결측은 NaN 유지, 파이프라인에서 train 중앙값으로 대치
         for t in TIS[:3]:
@@ -77,8 +81,10 @@ def load(c: str) -> pd.DataFrame:
     return pd.concat([df, pd.DataFrame(t2, index=df.index)], axis=1)
 
 
-# 비교 설계: 정상(HTN·DM·CKD 모두 없음) vs 선택 질환 "단독"(나머지 두 질환은 없음). 복합 질환자·다른 질환 단독은 제외
+# 비교 설계: 정상(HTN·DM·CKD 모두 없음) vs 선택 질환 ("전체"는 하나 이상 있는 환자 전원) "단독"(나머지 두 질환은 없음). 복합 질환자·다른 질환 단독은 제외
 def apply_pop(df: pd.DataFrame, disease: str) -> pd.DataFrame:
+    if disease == "전체":  # 정상 vs 질환 하나 이상: 전원 사용
+        return df.reset_index(drop=True)
     others = [k for k in DISEASES if k != disease]
     only = (df[disease] == 1) & (df[others] == 0).all(axis=1)
     normal = (df[DISEASES] == 0).all(axis=1)
@@ -270,33 +276,33 @@ fp = lambda p: "<0.001" if p < 0.001 else f"{p:.3f}"
 st.set_page_config(page_title="AEC·체성분 모델 실험", layout="wide")
 st.title("AEC · 체성분 landmark 모델 실험")
 st.caption("Gangnam 7/1/2 hold-out (train/valid/test) → Sinchon 외부검증. 모델 선택 탭에서 설정 후 [모델 실행]을 누르면 Output·비교 탭이 계산됩니다. 연구 요약은 code/research.html 참고.")
-disease = st.radio("대상 질환 (비교 설계: 정상 = HTN·DM·CKD 모두 없음  vs  선택 질환 단독)", DISEASES, index=DISEASES.index("DM"), horizontal=True)
+disease = st.radio("대상 질환 (비교 설계: 정상 = HTN·DM·CKD 모두 없음  vs  선택 질환 단독, 전체 = 하나라도 있음)", TARGETS, index=TARGETS.index("DM"), horizontal=True)
 FG, FS = load("gangnam"), load("sinchon")
 G, S = apply_pop(FG, disease), apply_pop(FS, disease)
-st.success(f"**비교 설계**: 정상 vs **{disease} 단독**  —  Gangnam {len(G):,}명 (정상 {int((G[disease] == 0).sum())} / {disease} {int(G[disease].sum())}), "
+st.success(f"**비교 설계**: 정상 vs **{pos_label(disease)}**  —  Gangnam {len(G):,}명 (정상 {int((G[disease] == 0).sum())} / {disease} {int(G[disease].sum())}), "
            f"Sinchon {len(S):,}명 (정상 {int((S[disease] == 0).sum())} / {disease} {int(S[disease].sum())})")
 t_sum, t_data, t_split, t_dist, t_model, t_out, t_base = st.tabs(["요약", "1. 데이터 로드", "2. 데이터 분할", "3. Data distribution", "4. 모델 선택", "5. Output", "6. Baseline 비교"])
 auc = roc_auc_score
 
 with t_sum:
     st.subheader("최종 요약: 정상 vs 질환 단독, 질환별 기본 조건 (로지스틱 회귀)")
-    st.caption("baseline = 성별·나이·키·체중. 각 질환의 기본 feature를 baseline에 추가한 모델의 AUC가 baseline 대비 어떻게 달라지는지 internal test(Gangnam)와 external(Sinchon)에서 비교한 결과입니다. feature는 Gangnam train→valid AUC로만 선택했고(test·external 미사용) 고정 후 한 번만 평가했습니다. Δ는 paired bootstrap 95% CI(500회), p는 DeLong이며 Holm 보정은 질환 3개에 대한 것입니다. split seed 111 고정.")
+    st.caption("baseline = 성별·나이·키·체중. 각 질환의 기본 feature를 baseline에 추가한 모델의 AUC가 baseline 대비 어떻게 달라지는지 internal test(Gangnam)와 external(Sinchon)에서 비교한 결과입니다. feature는 Gangnam train→valid AUC로만 선택했고(test·external 미사용) 고정 후 한 번만 평가했습니다. Δ는 paired bootstrap 95% CI(500회), p는 DeLong이며 Holm 보정은 대상 4개(HTN·DM·CKD·전체)에 대한 것입니다. split seed 111 고정.")
     srows, fig_rows, pt, pe = [], [], [], []
-    for dz in DISEASES:
+    for dz in TARGETS:
         Gd, Sd = apply_pop(FG, dz), apply_pop(FS, dz)
         fs_ = tuple(CLIN_BASE) + tuple(DEFAULT_FEATS[dz])
         Q, Q0 = run(fs_, dz, "Logistic Regression", SEED), run(tuple(CLIN_BASE), dz, "Logistic Regression", SEED)
         dt, de = delong_paired_auc_test(Q["y_te"], Q0["p_te"], Q["p_te"]), delong_paired_auc_test(Q["y_ext"], Q0["p_ext"], Q["p_ext"])
         ct, ce = boot_delta(Q["y_te"], Q0["p_te"], Q["p_te"]), boot_delta(Q["y_ext"], Q0["p_ext"], Q["p_ext"])
         pt.append(dt["p_value"]); pe.append(de["p_value"])
-        srows.append({"질환": dz, "internal(Gangnam) 정상/단독": f"{int((Gd[dz] == 0).sum())} / {int(Gd[dz].sum())}", "external(Sinchon) 정상/단독": f"{int((Sd[dz] == 0).sum())} / {int(Sd[dz].sum())}",
+        srows.append({"질환": dz, "internal(Gangnam) 정상/질환군": f"{int((Gd[dz] == 0).sum())} / {int(Gd[dz].sum())}", "external(Sinchon) 정상/질환군": f"{int((Sd[dz] == 0).sum())} / {int(Sd[dz].sum())}",
                       "internal test 양성": int(Q["y_te"].sum()), "추가 feature": len(DEFAULT_FEATS[dz]),
                       "internal test AUC (base→선택)": f"{auc(Q['y_te'], Q0['p_te']):.3f} → {auc(Q['y_te'], Q['p_te']):.3f}",
                       "internal test Δ [95% CI]": f"{dt['diff']:+.3f} [{ct[0]:+.3f}, {ct[1]:+.3f}]", "internal test p": fp(dt["p_value"]),
                       "external AUC (base→선택)": f"{auc(Q['y_ext'], Q0['p_ext']):.3f} → {auc(Q['y_ext'], Q['p_ext']):.3f}",
                       "external Δ [95% CI]": f"{de['diff']:+.3f} [{ce[0]:+.3f}, {ce[1]:+.3f}]", "external p": fp(de["p_value"]), "_dt": dt["diff"], "_de": de["diff"]})
         fig_rows += [(f"{dz} internal test", auc(Q["y_te"], Q0["p_te"]), auc(Q["y_te"], Q["p_te"])), (f"{dz} external", auc(Q["y_ext"], Q0["p_ext"]), auc(Q["y_ext"], Q["p_ext"]))]
-    ht, he = multipletests(pt, method="holm")[1], multipletests(pe, method="holm")[1]  # 질환 3개에 대한 Holm 보정
+    ht, he = multipletests(pt, method="holm")[1], multipletests(pe, method="holm")[1]  # 대상 4개(HTN·DM·CKD·전체)에 대한 Holm 보정
     for r, a_, b_ in zip(srows, ht, he):
         r["internal p (Holm)"], r["external p (Holm)"] = fp(a_), fp(b_)
         r["둘 다 Δ>0 & Holm p<0.05"] = "예" if (r["_dt"] > 0 and a_ < 0.05 and r["_de"] > 0 and b_ < 0.05) else "아니오"
@@ -309,11 +315,11 @@ with t_sum:
     fig.update_layout(barmode="group", yaxis_range=[0, 1], height=360, margin=dict(t=20), yaxis_title="AUC")
     st.plotly_chart(fig, width='stretch')
     st.markdown("**질환별 기본 추가 feature**")
-    st.dataframe(pd.DataFrame([{"질환": dz, "추가 feature": ", ".join(DEFAULT_FEATS[dz])} for dz in DISEASES]), hide_index=True, width='stretch')
+    st.dataframe(pd.DataFrame([{"질환": dz, "추가 feature": ", ".join(DEFAULT_FEATS[dz])} for dz in TARGETS]), hide_index=True, width='stretch')
     st.download_button("요약 표 CSV", ST.to_csv(index=False), "summary_default_conditions.csv", mime="text/csv")
 
     st.subheader("Odds ratio (기본 모델의 feature별, 정상 vs 질환 단독)")
-    ORT = pd.concat([or_table(dz) for dz in DISEASES], ignore_index=True)
+    ORT = pd.concat([or_table(dz) for dz in TARGETS], ignore_index=True)
     ORT["방향 일치"] = np.where(np.sign(np.log(ORT["OR_int"])) == np.sign(np.log(ORT["OR_ext"])), "예", "아니오")
     fmt = lambda o, lo, hi: "-" if pd.isna(o) else f"{o:.2f} ({lo:.2f}-{hi:.2f})"
     show = pd.DataFrame({"질환": ORT["질환"], "feature": ORT["feature"],
@@ -323,7 +329,7 @@ with t_sum:
     st.dataframe(show, hide_index=True, width='stretch')
     st.caption("각 코호트의 정상 + 질환 단독 환자 전체에 로지스틱 회귀를 적합(hold-out 분할과 무관). 연속형은 코호트 내 +1SD당 OR, Sex(M)은 남성 vs 여성. 모든 feature를 동시에 투입해 다른 변수 보정 후의 값이며, "
                "Tier2 비율끼리·키·체중은 상관이 커서 OR이 불안정할 수 있습니다. 로그 비율 feature는 +1SD 증가가 해당 두 값의 비 변화에 대응합니다. 다중비교 보정은 없습니다.")
-    FD = st.radio("Forest plot 질환", DISEASES, index=DISEASES.index(disease), horizontal=True, key="forest_dis")
+    FD = st.radio("Forest plot 질환", TARGETS, index=TARGETS.index(disease), horizontal=True, key="forest_dis")
     F_ = ORT[ORT["질환"] == FD].iloc[::-1]
     fig = go.Figure()
     for tag, c_, off in [("int", "#0072B2", 0.12), ("ext", "#D55E00", -0.12)]:
@@ -333,16 +339,16 @@ with t_sum:
     fig.add_vline(x=1, line_dash="dash", line_color="gray")
     fig.update_layout(height=max(320, 42 * len(F_)), xaxis_type="log", xaxis_title="Odds ratio (log scale)", yaxis=dict(tickmode="array", tickvals=list(range(len(F_))), ticktext=list(F_["feature"])), margin=dict(t=20))
     st.plotly_chart(fig, width='stretch')
-    st.warning("**해석**: valid로만 feature를 고르는 절차로 바꾸자 세 질환 모두 baseline 대비 개선이 유의하지 않고 external에서는 Δ가 음수입니다(위 표). 이전에 test·external p로 feature를 고른 결과는 선택 과정이 만든 착시였습니다. "
-               "valid 양성이 HTN 24·DM 10·CKD 2명뿐이라 valid 기반 선택 자체가 불안정하고(특히 CKD는 무의미), internal test 양성도 DM 19·CKD 4명으로 CI가 매우 넓습니다. "
+    st.warning("**해석**: valid로만 feature를 고르는 절차로 바꾸자 모든 대상에서 baseline 대비 개선이 유의하지 않고 external에서는 Δ가 음수입니다(위 표). 이전에 test·external p로 feature를 고른 결과는 선택 과정이 만든 착시였습니다. "
+               "valid 양성이 HTN 24·DM 10·CKD 2·전체 60명뿐이라 valid 기반 선택 자체가 불안정하고(특히 CKD는 무의미), internal test 양성도 DM 19·CKD 4명으로 CI가 매우 넓습니다. "
                "현재 데이터·설계에서는 baseline(성별·나이·키·체중)에 landmark 지표를 추가한 AUC 개선을 지지하는 증거가 없다고 해석하는 것이 정직합니다.")
 
 with t_data:
-    st.markdown(f"위에서 고른 **{disease}** 기준으로, 정상군(세 질환 모두 없음)과 {disease} 단독군만 사용합니다. 다른 질환이 하나라도 겹친 환자는 모든 탭에서 제외됩니다.")
+    st.markdown(f"위에서 고른 **{disease}** 기준으로, 정상군(세 질환 모두 없음)과 " + ("질환이 하나라도 있는 환자 전원을 사용합니다." if disease == "전체" else f"{disease} 단독군만 사용합니다. 다른 질환이 하나라도 겹친 환자는 모든 탭에서 제외됩니다."))
     rows = []
     for n, F in [("Gangnam (학습)", FG), ("Sinchon (외부)", FS)]:
         d = apply_pop(F, disease)
-        rows.append({"코호트": n, "QC 후 전체": len(F), "정상": int((d[disease] == 0).sum()), f"{disease} 단독": int(d[disease].sum()), "제외(복합·타 질환)": len(F) - len(d),
+        rows.append({"코호트": n, "QC 후 전체": len(F), "정상": int((d[disease] == 0).sum()), pos_label(disease): int(d[disease].sum()), "제외(복합·타 질환)": len(F) - len(d),
                      "사용 인원": len(d), "여성(%)": round(100 * (1 - d["Sex(M)"].mean()), 1), "나이": f"{d.PatientAge.mean():.1f} ± {d.PatientAge.std():.1f}", "BMI": f"{d.BMI.mean():.1f} ± {d.BMI.std():.1f}"})
     st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
     st.caption("QC(landmark 순서 이상 제외) 후 인원 기준. 사용 가능한 feature: clinical 4개(성별·나이·키·체중), 조직 4종 × landmark 12곳, Tier1 비율 33개, Tier2 비율(같은 조직의 landmark 쌍) 253개.")
@@ -388,9 +394,9 @@ with t_model:
         verdict = {(True, True): "test와 외부 **둘 다 개선이 DeLong 유의**합니다.", (False, True): "**Sinchon 외부에서만 개선이 DeLong 유의**하고 Gangnam test는 유의하지 않습니다.",
                    (True, False): "**Gangnam test에서만 개선이 DeLong 유의**하고 외부는 유의하지 않습니다.", (False, False): "test와 외부 모두 개선이 DeLong 유의하지 않습니다."}[(ok_te, ok_ex)]
         npv, npt = int(QL["y_va"].sum()), int(QL["y_te"].sum())
-        txt = (f"**정상 vs {disease} 단독** · 현재 설정(로지스틱 회귀, baseline 포함 feature {len(feats)}개) vs baseline({', '.join(base)}): "
+        txt = (f"**정상 vs {pos_label(disease)}** · 현재 설정(로지스틱 회귀, baseline 포함 feature {len(feats)}개) vs baseline({', '.join(base)}): "
                f"Sinchon 외부 AUC {a_ex0:.3f}→{a_ex1:.3f} (p={fp(dex['p_value'])}), Gangnam test AUC {a_te0:.3f}→{a_te1:.3f} (p={fp(dte['p_value'])}). {verdict} "
-               f"Gangnam {disease} 단독 {n_pos_g}명 중 valid 양성 {npv}명·test 양성 {npt}명")
+               f"Gangnam {pos_label(disease)} {n_pos_g}명 중 valid 양성 {npv}명·test 양성 {npt}명")
         txt += "으로 표본이 작아 결과가 매우 불안정합니다. " if min(npv, npt) < 30 else "입니다. "
         if tuple(feats) == tuple(CLIN_BASE) + tuple(DEFAULT_FEATS[disease]) and list(base) == CLIN_BASE:
             txt += f"이 기본 feature는 {disease}에서 Gangnam valid AUC로만 골랐고 test·external은 선택에 쓰지 않았으므로 위 p는 선택에 오염되지 않았습니다(valid 양성이 적어 선택 자체는 불안정). "
@@ -441,9 +447,9 @@ with t_model:
 npos = int(G[disease].sum()) if len(G) else 0
 msg = None
 if len(G) < 100 or len(S) < 50:
-    msg = f"정상 vs {disease} 단독으로 좁히면 환자가 너무 적습니다 (Gangnam<100 또는 Sinchon<50). 다른 질환을 고르세요."
+    msg = f"정상 vs {pos_label(disease)}로 좁히면 환자가 너무 적습니다 (Gangnam<100 또는 Sinchon<50). 다른 질환을 고르세요."
 elif min(npos, len(G) - npos) < 20 or S[disease].nunique() < 2:
-    msg = f"{disease} 단독 또는 정상이 Gangnam에서 20명 미만(또는 Sinchon이 한 클래스뿐)이라 분할·평가가 불안정합니다. 다른 질환을 고르세요."
+    msg = f"{pos_label(disease)} 또는 정상이 Gangnam에서 20명 미만(또는 Sinchon이 한 클래스뿐)이라 분할·평가가 불안정합니다. 다른 질환을 고르세요."
 elif not feats or not base:
     msg = "모델 선택 탭에서 feature와 baseline을 하나 이상 선택하세요."
 if msg:
@@ -454,7 +460,7 @@ if len(feats) > npos / 10:
     t_model.warning(f"feature {len(feats)}개가 양성 {npos}명 대비 많습니다 (양성 10명당 1개 권장). 과적합 가능성이 큽니다.")
 
 with t_split:
-    st.write(f"정상 vs **{disease} 단독** 데이터를 {disease} 비율을 유지(stratified)하며 split seed={seed}로 나눕니다. Gangnam은 train 70% / valid 10% / test 20%로 나눕니다. train으로 학습 → valid·test 평가, train+valid로 재학습한 모델을 Sinchon(전체)에 적용합니다.")
+    st.write(f"정상 vs **{pos_label(disease)}** 데이터를 {disease} 비율을 유지(stratified)하며 split seed={seed}로 나눕니다. Gangnam은 train 70% / valid 10% / test 20%로 나눕니다. train으로 학습 → valid·test 평가, train+valid로 재학습한 모델을 Sinchon(전체)에 적용합니다.")
     i_tr, i_va, i_te = split(G[disease].to_numpy(int), seed)
     parts = {"Gangnam train": G.iloc[i_tr], "Gangnam valid": G.iloc[i_va], "Gangnam test": G.iloc[i_te], "Sinchon (외부 전체)": S}
     rows = [{"구분": k, "N": len(d), "비율(%)": round(100 * len(d) / len(G), 1) if k.startswith("Gangnam") else None, **{f"{k} 양성 (n, %)": f"{int(d[k].sum())} ({100 * d[k].mean():.1f}%)" for k in DISEASES}, "남성(%)": round(100 * d["Sex(M)"].mean(), 1), "나이": f"{d.PatientAge.mean():.1f} ± {d.PatientAge.std():.1f}",
@@ -468,13 +474,13 @@ with t_split:
     st.caption("valid는 보고용(튜닝 없음). split seed는 111로 고정되어 있습니다. test가 작아 다른 seed에서는 AUC가 크게 달라질 수 있습니다.")
 
 with t_dist:
-    num = [c for c in G.columns if c not in ("PatientID", "PatientSex", "Sex(M)", *DISEASES) and not c.endswith("_center") and pd.api.types.is_numeric_dtype(G[c])]
+    num = [c for c in G.columns if c not in ("PatientID", "PatientSex", "Sex(M)", *TARGETS) and not c.endswith("_center") and pd.api.types.is_numeric_dtype(G[c])]
     c1, c2 = st.columns(2)
     col = c1.selectbox("변수", num, index=num.index(DEFAULT_FEATS[disease][0]) if DEFAULT_FEATS[disease][0] in num else 0)
     by = c2.radio("색 구분", ["질환 유무", "코호트"], horizontal=True)
     both = pd.concat([G.assign(코호트="Gangnam"), S.assign(코호트="Sinchon")], ignore_index=True)
-    both["질환 유무"] = np.where(both[disease] == 1, f"{disease} 단독", "정상")
-    cmap = {f"{disease} 단독": "#D55E00", "정상": "#0072B2", "Gangnam": "#0072B2", "Sinchon": "#D55E00"}  # 색약 안전한 주황/파랑 대비
+    both["질환 유무"] = np.where(both[disease] == 1, pos_label(disease), "정상")
+    cmap = {pos_label(disease): "#D55E00", "정상": "#0072B2", "Gangnam": "#0072B2", "Sinchon": "#D55E00"}  # 색약 안전한 주황/파랑 대비
     fig = px.histogram(both, x=col, color=by, facet_col="코호트" if by == "질환 유무" else None, barmode="overlay", histnorm="probability density", opacity=0.65, nbins=40, color_discrete_map=cmap)
     fig.update_layout(height=380, margin=dict(t=30))
     st.plotly_chart(fig, width='stretch')
@@ -594,7 +600,7 @@ with t_base:
     st.subheader("세 질환 한꺼번에 (같은 feature·모델)")
     rows = []
     with st.spinner("질환별 학습 중..."):
-        for dz in DISEASES:  # 각 질환마다 정상 vs 해당 질환 단독
+        for dz in TARGETS:  # 각 대상마다 정상 vs 해당 질환(단독 또는 전체)
             Q, Q0 = run(feats, dz, model, seed), run(tuple(base), dz, model, seed)
             a, b, b0, c, e, e0 = Q["y_te"], Q["p_te"], Q0["p_te"], Q["y_ext"], Q["p_ext"], Q0["p_ext"]
             rows.append({"질환": dz, "test Base": auc(a, b0), "test 선택": auc(a, b), "외부 Base": auc(c, e0), "외부 선택": auc(c, e),
@@ -606,4 +612,4 @@ with t_base:
     num_cols = t3.select_dtypes("float").columns
     t3[num_cols] = t3[num_cols].round(3)
     st.dataframe(t3, hide_index=True, width='stretch')
-    st.caption("각 질환은 정상 vs 해당 질환 단독 모집단에서 따로 학습·평가한 결과입니다. 외부 DeLong p를 질환 수(3)에 대해 Holm 보정했습니다. 피처·모델을 바꿔 본 횟수는 반영되지 않습니다.")
+    st.caption("각 대상은 정상 vs 해당 질환 단독(전체는 하나 이상) 모집단에서 따로 학습·평가한 결과입니다. 외부 DeLong p를 대상 수(4)에 대해 Holm 보정했습니다. 피처·모델을 바꿔 본 횟수는 반영되지 않습니다.")
