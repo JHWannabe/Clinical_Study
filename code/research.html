@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AEC·체성분 연구 현황</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--fg:#1d2330;--mut:#667085;--line:#e4e7ec;--acc:#2f5bea;--good:#0f7b4f;--bad:#b42318;--warn:#b54708;--soft:#eef2ff}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171c25;--fg:#e6e9f0;--mut:#98a2b3;--line:#2a3140;--acc:#7c9bff;--good:#4ade80;--bad:#f87171;--warn:#fbbf24;--soft:#1c2440}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
+nav{position:fixed;top:0;left:0;width:210px;height:100vh;padding:24px 16px;border-right:1px solid var(--line);background:var(--card);overflow:auto}
+nav b{display:block;margin-bottom:12px;font-size:14px}
+nav a{display:block;padding:5px 10px;border-radius:6px;color:var(--mut);text-decoration:none;font-size:13.5px}
+nav a:hover{background:var(--soft);color:var(--acc)}
+main{margin-left:210px;max-width:1000px;padding:32px 40px 80px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:20px;margin:48px 0 12px;padding-top:8px;border-top:1px solid var(--line)}h3{font-size:15.5px;margin:24px 0 8px}
+.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:12px 0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.kpi small{color:var(--mut);display:block}.kpi strong{font-size:22px}
+.take{border-left:4px solid var(--acc);background:var(--soft);padding:10px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+ul{padding-left:20px;margin:6px 0}li{margin:3px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0;background:var(--card)}
+th,td{border:1px solid var(--line);padding:5px 9px;text-align:center}
+th{background:var(--soft);font-weight:600}td:first-child,th:first-child{text-align:left}
+.wrap{overflow-x:auto}.cap{color:var(--mut);font-size:13px;margin:2px 0 6px}
+.pos{color:var(--good);font-weight:600}.neg{color:var(--bad);font-weight:600}.mut{color:var(--mut)}
+figure{margin:12px 0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
+figure img{width:100%;height:auto;display:block;border-radius:6px}
+figcaption{color:var(--mut);font-size:13px;margin-top:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;background:var(--soft);color:var(--acc);margin-right:4px}
+@media(max-width:820px){nav{position:static;width:auto;height:auto;border:0;border-bottom:1px solid var(--line)}nav a{display:inline-block}main{margin:0;padding:20px 16px 60px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+<b>AEC·체성분 연구</b>
+<a href="#sum">한눈에 보기</a>
+<a href="#design">1. 연구 설계</a>
+<a href="#q1">2. AEC·체성분 곡선 AUC</a>
+<a href="#q2">3. Anchor 단면 AUC</a>
+<a href="#q3">4. 질환 유무 차이</a>
+<a href="#q4">5. Patient-wise 정규화</a>
+<a href="#q5">6. 조합·모델 비교</a>
+<a href="#lit">7. 선행연구 비교</a>
+<a href="#next">8. 결론·다음 단계</a>
+<a href="#files">자료 위치</a>
+<a href="http://localhost:8501" style="margin-top:12px;color:var(--acc);font-weight:600">▶ 실시간 모델 실험 앱</a>
+</nav>
+<main>
+
+<h1>AEC · 체성분 곡선을 이용한 만성질환 연구</h1>
+<p class="sub"><a href="http://localhost:8501">▶ 실시간 모델 실험 앱 열기</a> (<code>streamlit run code/app.py</code> 실행 후) · HTN · DM · CKD · Gangnam 내부 / Sinchon 외부검증 · 최신 덱 기준 2026-10-06 (JangHoon Chun)</p>
+
+<h2 id="sum" style="border:0;margin-top:20px">한눈에 보기</h2>
+<div class="kpis">
+<div class="kpi"><small>Gangnam (QC 후)</small><strong>1,436명</strong></div>
+<div class="kpi"><small>Sinchon (QC 후)</small><strong>1,129명</strong></div>
+<div class="kpi"><small>질환</small><strong>HTN · DM · CKD</strong></div>
+<div class="kpi"><small>Landmark</small><strong>12곳 × 조직 4종</strong></div>
+</div>
+<div class="take"><b>핵심 메시지</b>
+<ul>
+<li>기본 정보(성별·나이·키·체중)에 AEC·체성분 FPCA 점수를 더하면 외부(Sinchon)에서 ΔAUC +0.02~+0.07 개선, 내부에서는 대부분 비유의 (261002, 구 코호트 1,260/1,123명 기준, 다중비교 보정 전).</li>
+<li>Landmark 단면 값은 <b>VAT가 질환과 가장 뚜렷</b> (T11~L2 부근). 나이·성별·BMI 보정 후 두 코호트에서 일관된 것은 <b>HTN의 VAT뿐</b> (DM은 Gangnam만, CKD는 둘 다 비유의).</li>
+<li>AEC는 raw 값에서는 약하지만 <b>환자별 정규화(patient-wise) 후 HTN·DM에서 일관된 신호</b>. 단, 외부 AUC 개선은 ≤0.023으로 작음. 스캐너 보정 후 CKD 신호는 대부분 사라짐.</li>
+<li>Landmark 지표를 더해도 AUC 개선은 대체로 노이즈 수준. MLP는 평균적으로 LR과 같고(개별 세트 차이 ≤|0.012|), 일부 세트에서만 소폭 차이.</li>
+</ul></div>
+
+<h2 id="design">1. 연구 설계</h2>
+<div class="grid2">
+<div class="card"><h3 style="margin-top:0">목적</h3>
+<ul><li>기존 CT에서 얻는 AEC·체성분(VAT/SAT/TAMA)으로 HTN/DM/CKD를 얼마나 구분하는가</li>
+<li>추가 비용·방사선 없는 opportunistic screening</li></ul></div>
+<div class="card"><h3 style="margin-top:0">방법</h3>
+<ul><li>입력: 간~치골을 128구간 표준화한 AEC·체성분 곡선 (FPCA 압축) / 12개 landmark 단면</li>
+<li>모델: 질환별 로지스틱 회귀, Gangnam 5-fold CV → Sinchon 외부검증</li>
+<li>비교: DeLong, BH-FDR, 환자 단위 부트스트랩</li></ul></div>
+</div>
+<div class="wrap"><table>
+<tr><th>Variable</th><th>Gangnam</th><th>Sinchon</th></tr>
+<tr><td>N (QC 후)</td><td>1,436</td><td>1,129</td></tr>
+<tr><td>여성 비율</td><td>61.4%</td><td>48.7%</td></tr>
+<tr><td>나이</td><td>57.7 ± 12.6</td><td>59.6 ± 12.4</td></tr>
+<tr><td>BMI</td><td>23.6 ± 3.2</td><td>23.5 ± 3.1</td></tr>
+<tr><td>HTN</td><td>469 (32.7%)</td><td>492 (43.6%)</td></tr>
+<tr><td>DM</td><td>291 (20.3%)</td><td>338 (29.9%)</td></tr>
+<tr><td>CKD</td><td>135 (9.4%)</td><td>171 (15.1%)</td></tr>
+</table></div>
+<p class="cap">두 코호트는 case-mix가 다름(유병률·성별). Gangnam·Sinchon은 단면 코호트.</p>
+<figure><img src="../outputs/clinic4/figures/study_design.png" alt="study design"><figcaption>Study design</figcaption></figure>
+
+<h2 id="q1">2. AEC·체성분 곡선(FPCA)의 AUC 기여</h2>
+<div class="take">체성분 곡선이 가장 큰 기여. AEC 단독은 3개 질환 모두 비유의. 유의한 개선은 주로 External.</div>
+<p class="cap">261002 세미나, <b>구 코호트 Gangnam 1,260 / Sinchon 1,123명</b> 기준 (이후 덱은 QC 후 1,436 / 1,129명). 별표(*)는 다중비교 보정 전 DeLong p&lt;0.05이며, 세미나 덱의 Bonferroni 기준(α≈0.017)으로는 HTN Internal(0.035)이 유의하지 않음.</p>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Cohort</th><th>Baseline AUC</th><th>+AEC+체성분</th><th>ΔAUC</th><th>DeLong p</th></tr>
+<tr><td>HTN</td><td>Internal</td><td>0.795</td><td>0.809</td><td class="pos">+0.015</td><td>0.035*</td></tr>
+<tr><td></td><td>External</td><td>0.718</td><td>0.741</td><td class="pos">+0.023</td><td>0.011*</td></tr>
+<tr><td>DM</td><td>Internal</td><td>0.714</td><td>0.735</td><td>+0.022</td><td>0.078</td></tr>
+<tr><td></td><td>External</td><td>0.665</td><td>0.706</td><td class="pos">+0.041</td><td>&lt;0.001*</td></tr>
+<tr><td>CKD</td><td>Internal</td><td>0.769</td><td>0.784</td><td>+0.015</td><td>0.39</td></tr>
+<tr><td></td><td>External</td><td>0.615</td><td>0.681</td><td class="pos">+0.065</td><td>&lt;0.001*</td></tr>
+</table></div>
+<h3>AEC 단독 (Gangnam OOF, 구 코호트: 양성 수 386/233/105)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>n(pos)</th><th>Baseline</th><th>+AEC</th><th>Δ</th><th>p</th></tr>
+<tr><td>HTN</td><td>386</td><td>0.795</td><td>0.804</td><td>+0.009</td><td>0.050 (경계)</td></tr>
+<tr><td>DM</td><td>233</td><td>0.714</td><td>0.732</td><td>+0.018</td><td>0.069</td></tr>
+<tr><td>CKD</td><td>105</td><td>0.769</td><td>0.752</td><td class="neg">−0.017</td><td>0.273</td></tr>
+</table></div>
+<div class="grid2">
+<figure><img src="../outputs/clinic4/figures/delta_auc_vs_baseline.png" alt="ΔAUC vs baseline 막대그래프"><figcaption>ΔAUC vs baseline</figcaption></figure>
+<figure><img src="../outputs/clinic4/figures/aec_curve_by_disease_sex.png" alt="질환×성별 AEC 평균 곡선"><figcaption>AEC 곡선: 질환 × 성별</figcaption></figure>
+<figure><img src="../outputs/clinic4/figures/fpca_elbow.png" alt="FPCA scree와 elbow"><figcaption>FPCA 성분 수 선택 (Kneedle elbow)</figcaption></figure>
+<figure><img src="../outputs/clinic4/figures/forest_or.png" alt="OR forest plot"><figcaption>Forest plot (OR)</figcaption></figure>
+</div>
+<p class="mut">한계: 튜닝·평가에 같은 fold 사용(약간 낙관적), CKD는 양성 105명으로 EPV≈5.</p>
+
+<h2 id="q2">3. Anchor(landmark) 단면 값의 AUC 기여</h2>
+<div class="take">12개 anchor 값을 더해도 Model1(+VAT 합) 대비 일관된 향상 없음. FDR 후 유의 모델 없음. (261003)</div>
+<div class="wrap"><table>
+<tr><th>Model</th><th>#Feat</th><th>HTN Int</th><th>HTN Ext</th><th>DM Int</th><th>DM Ext</th><th>CKD Int</th><th>CKD Ext</th></tr>
+<tr><td>baseline (clinic4)</td><td>4</td><td>0.731</td><td>0.700</td><td>0.671</td><td>0.690</td><td>0.856</td><td>0.621</td></tr>
+<tr><td>Model1 (+VAT 합)</td><td>5</td><td>0.753</td><td>0.711</td><td>0.634</td><td>0.689</td><td>0.841</td><td>0.657</td></tr>
+<tr><td>+VAT @12</td><td>16</td><td>0.764</td><td>0.715</td><td>0.659</td><td>0.688</td><td>0.801</td><td>0.659</td></tr>
+<tr><td>+SAT @12</td><td>17</td><td>0.750</td><td>0.714</td><td>0.683</td><td>0.699</td><td>0.827</td><td>0.632</td></tr>
+<tr><td>+TAMA @12</td><td>17</td><td>0.752</td><td>0.710</td><td>0.647</td><td>0.676</td><td>0.871</td><td>0.628</td></tr>
+<tr><td>+VAT,SAT @12</td><td>28</td><td>0.763</td><td>0.716</td><td>0.703</td><td>0.701</td><td>0.857</td><td>0.671</td></tr>
+<tr><td>+VAT,SAT,TAMA @12</td><td>40</td><td>0.763</td><td>0.715</td><td>0.685</td><td>0.682</td><td>0.864</td><td>0.668</td></tr>
+</table></div>
+<p class="cap">Int = Gangnam hold-out, Ext = Sinchon 외부. baseline = clinic4(성별·나이·키·체중 4개)로 이후 clinical(나이·성별·BMI)과 다름. 261003은 양성·음성 1:1 언더샘플링 + 7/1/2 hold-out 설계. DM·CKD의 내부 변동은 test 117·54명 노이즈. Model1(VAT 합)의 CKD 외부 향상(+0.036)은 FDR 보정 후 비유의.</p>
+<div class="card"><b>단일 anchor 값 연관 (261003, clinic4+VAT 합 보정, +1SD OR Gangnam / Sinchon)</b>
+<ul><li>두 코호트 모두 유의하고 방향이 같은 값 5개: DM의 SAT@femoral_head (0.70 / 0.67), TAMA@femoral_head (0.73 / 0.69), SAT@pubis, SAT@L4, CKD의 SAT@S1 (0.71 / 0.69). HTN은 없음.</li>
+<li>VAT 합: HTN 1.79 / 1.16(p=0.052), DM 1.50 / 1.12(p=0.126), CKD 1.19 / 1.35(Sinchon p&lt;0.001).</li>
+<li>보정 변수가 달라(키·체중 vs BMI) 아래 261006의 결과와 결론이 다를 수 있음 (261006: HTN VAT만 일관, CKD 비유의).</li></ul></div>
+<div class="grid2">
+<figure><img src="../outputs/clinic4/landmark/landmark_or_heatmap.png" alt="anchor×조직 OR heatmap"><figcaption>Anchor × 조직 OR 프로파일</figcaption></figure>
+<figure><img src="../outputs/clinic4/landmark/anchor_k_curve.png" alt="선택 값 개수별 AUC 곡선"><figcaption>선택 값 개수 k별 AUC</figcaption></figure>
+</div>
+<figure><img src="../outputs/clinic4/landmark/landmark_report_sample_864318.png" alt="sample"><figcaption>샘플 환자 리포트 대조 (ID 864318)</figcaption></figure>
+
+<h2 id="q3">4. Landmark 단면의 질환 유무 차이 (261006)</h2>
+<div class="take">VAT가 전 질환에서 가장 크다. 보정 후 두 코호트에서 일관된 결과는 <b>HTN의 VAT</b>뿐. 표의 * = BH-FDR&lt;0.05.</div>
+<h3>미보정 Cohen d (* = FDR&lt;0.05)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Cohort</th><th>VAT@L1</th><th>VAT@L3</th><th>SAT@L3</th><th>TAMA@L3</th><th>AEC@L3</th></tr>
+<tr><td>HTN</td><td>Gangnam</td><td>0.91*</td><td>0.91*</td><td>0.23*</td><td>0.26*</td><td>0.67*</td></tr>
+<tr><td></td><td>Sinchon</td><td>0.61*</td><td>0.57*</td><td>0.14*</td><td>0.09</td><td>0.25*</td></tr>
+<tr><td>DM</td><td>Gangnam</td><td>0.76*</td><td>0.79*</td><td>0.17*</td><td>0.33*</td><td>0.64*</td></tr>
+<tr><td></td><td>Sinchon</td><td>0.46*</td><td>0.47*</td><td>−0.04</td><td>0.07</td><td>0.20*</td></tr>
+<tr><td>CKD</td><td>Gangnam</td><td>0.75*</td><td>0.61*</td><td>0.02</td><td>0.45*</td><td>0.54*</td></tr>
+<tr><td></td><td>Sinchon</td><td>0.41*</td><td>0.37*</td><td>−0.01</td><td>0.07</td><td>0.11</td></tr>
+</table></div>
+<h3>나이·성별·BMI 보정 OR (+1SD)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Cohort</th><th>VAT@L1</th><th>VAT@L2</th><th>VAT@L3</th><th>SAT@L3</th><th>TAMA@L3</th><th>AEC@L3</th></tr>
+<tr><td>HTN</td><td>Gangnam</td><td>1.69*</td><td>1.74*</td><td>1.77*</td><td>1.46*</td><td>0.89</td><td>1.46*</td></tr>
+<tr><td></td><td>Sinchon</td><td>1.39*</td><td>1.35*</td><td>1.29*</td><td>0.93</td><td>0.95</td><td>1.05</td></tr>
+<tr><td>DM</td><td>Gangnam</td><td>1.39*</td><td>1.49*</td><td>1.48*</td><td>0.99</td><td>1.11</td><td>1.34*</td></tr>
+<tr><td></td><td>Sinchon</td><td>1.09</td><td>1.09</td><td>1.12</td><td>0.69*</td><td>0.80</td><td>1.02</td></tr>
+<tr><td>CKD</td><td>Gangnam</td><td>1.18</td><td>1.09</td><td>0.98</td><td>1.10</td><td>1.27</td><td>1.19</td></tr>
+<tr><td></td><td>Sinchon</td><td>1.32</td><td>1.30</td><td>1.23</td><td>0.88</td><td>0.86</td><td>0.98</td></tr>
+</table></div>
+<h3>성별 층화 VAT@L2 OR (남성은 코호트 간 차이가 큼, * = FDR&lt;0.05)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Sex</th><th>Gangnam</th><th>Sinchon</th></tr>
+<tr><td>HTN</td><td>M / F</td><td>1.93* / 1.40*</td><td>1.35 / 1.32</td></tr>
+<tr><td>DM</td><td>M / F</td><td>1.47* / 1.43</td><td>1.05 / 1.23</td></tr>
+<tr><td>CKD</td><td>M / F</td><td>1.12 / 1.12</td><td>1.20 / 1.58</td></tr>
+</table></div>
+<div class="grid2">
+<figure><img src="../outputs/clinic4/landmark/landmark_cohen_d_by_landmark.png" alt="landmark별 Cohen d"><figcaption>Landmark별 Cohen d</figcaption></figure>
+<figure><img src="../outputs/clinic4/landmark/sex_stratified_delta_auc.png" alt="성별 층화 ΔAUC"><figcaption>성별 층화 ΔAUC</figcaption></figure>
+<figure><img src="../outputs/clinic4/landmark/landmark_group_means_gangnam.png" alt="Gangnam 질환별 landmark 평균"><figcaption>Gangnam 질환별 landmark 평균</figcaption></figure>
+<figure><img src="../outputs/clinic4/landmark/landmark_group_means_sinchon.png" alt="Sinchon 질환별 landmark 평균"><figcaption>Sinchon 질환별 landmark 평균</figcaption></figure>
+</div>
+
+<h2 id="q4">5. Patient-wise 정규화와 AEC 신호</h2>
+<div class="take">환자 자신의 값으로 정규화하면 AEC에서 일관된 위치가 크게 늘지만(HTN 111, DM 94, CKD 47), 외부 AUC 변화는 ≤ 0.023. 스캐너 교란 가능성 있음.</div>
+<h3>일관된 위치 수 (128곳 중, 두 코호트 FDR&lt;0.05 &amp; 같은 방향, 일부 행만 표시)</h3>
+<div class="wrap"><table>
+<tr><th>Measure</th><th>Disease</th><th>raw</th><th>pw_mean</th><th>pw_z</th><th>pw_minmax</th><th>pw_L3</th></tr>
+<tr><td>VAT</td><td>HTN</td><td>84</td><td>13</td><td>13</td><td>0</td><td>0</td></tr>
+<tr><td></td><td>DM</td><td>0</td><td>0</td><td>0</td><td>6</td><td>0</td></tr>
+<tr><td>SAT</td><td>DM / CKD</td><td>0 / 0</td><td>0 / 0</td><td>7 / 18</td><td>0 / 0</td><td>23 / 0</td></tr>
+<tr><td>TAMA</td><td>CKD</td><td>0</td><td>4</td><td>6</td><td>0</td><td>0</td></tr>
+<tr><td>AEC</td><td>HTN</td><td>0</td><td class="pos">111</td><td>63</td><td>69</td><td>61</td></tr>
+<tr><td></td><td>DM</td><td>0</td><td class="pos">94</td><td>23</td><td>18</td><td>69</td></tr>
+<tr><td></td><td>CKD</td><td>0</td><td>47</td><td>25</td><td>27</td><td>0</td></tr>
+</table></div>
+<h3>AEC patient-wise 곡선 PC1 (+1SD OR, 보정 후)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Gangnam</th><th>Gangnam +장비</th><th>Sinchon</th><th>Sinchon +장비</th></tr>
+<tr><td>HTN</td><td>0.61 (&lt;0.001)</td><td>0.61 (&lt;0.001)</td><td>0.72 (&lt;0.001)</td><td>0.74 (&lt;0.001)</td></tr>
+<tr><td>DM</td><td>0.56 (&lt;0.001)</td><td>0.51 (&lt;0.001)</td><td>0.71 (&lt;0.001)</td><td>0.70 (&lt;0.001)</td></tr>
+<tr><td>CKD</td><td>0.67 (0.005)</td><td>0.80 (0.132)</td><td>0.62 (&lt;0.001)</td><td>0.64 (&lt;0.001)</td></tr>
+</table></div>
+<p class="cap">HTN·DM은 나이·성별·BMI·장비 보정 후에도 두 코호트 모두 유의. CKD는 Sinchon에서만(Gangnam은 장비 보정 후 p=0.132로 소실). OR&lt;1의 부호는 PC1 방향이 임의라 해석에 주의. 위치별 FDR 기준에서는 장비 보정 후 CKD AEC 47→0, HTN pw_z 63→19로 크게 줄어듦.</p>
+<h3>스캐너 분포 (교란 점검)</h3>
+<div class="wrap"><table>
+<tr><th>Cohort</th><th>Scanner</th><th>N</th><th>여성</th><th>HTN</th><th>DM</th><th>CKD</th></tr>
+<tr><td>Gangnam</td><td>Ingenuity Core 128</td><td>242</td><td>45%</td><td>35%</td><td>21%</td><td>7%</td></tr>
+<tr><td></td><td>Revolution CT</td><td>363</td><td>78%</td><td class="neg">20%</td><td>16%</td><td>4%</td></tr>
+<tr><td></td><td>SOMATOM Definition AS+</td><td>258</td><td>54%</td><td>45%</td><td>28%</td><td>19%</td></tr>
+<tr><td></td><td>Sensation 64</td><td>492</td><td>64%</td><td>35%</td><td>21%</td><td>9%</td></tr>
+<tr><td></td><td>other</td><td>81</td><td>47%</td><td>32%</td><td>10%</td><td>14%</td></tr>
+<tr><td>Sinchon</td><td>SOMATOM Definition AS+</td><td>193</td><td>45%</td><td>40%</td><td>23%</td><td>9%</td></tr>
+<tr><td></td><td>SOMATOM Definition Flash</td><td>259</td><td>46%</td><td>42%</td><td>34%</td><td>17%</td></tr>
+<tr><td></td><td>SOMATOM Force</td><td>170</td><td>47%</td><td>48%</td><td>32%</td><td>19%</td></tr>
+<tr><td></td><td>iCT 256</td><td>295</td><td>56%</td><td>40%</td><td>30%</td><td>13%</td></tr>
+<tr><td></td><td>other</td><td>212</td><td>47%</td><td>50%</td><td>30%</td><td>18%</td></tr>
+</table></div>
+<p class="cap">장비에 따라 질환 유병률이 달라 AEC 신호가 교란될 수 있음. 최다 장비 1종만 쓰면 일관된 위치가 대부분 0으로 감소(표본 감소 영향 포함). 예외: AEC DM의 pw_mean은 94→92곳, 최다 장비 1종에서도 52곳 유지.</p>
+<div class="grid2">
+<figure><img src="../outputs/clinic4/landmark/ratio_heatmap_AEC_AEC.png" alt="AEC 위치 간 비율 heatmap"><figcaption>AEC 위치 간 비율 heatmap</figcaption></figure>
+<figure><img src="../outputs/clinic4/landmark/landmark_all_input_coef_heatmap.png" alt="전체 입력 계수 heatmap"><figcaption>전체 입력 계수 heatmap</figcaption></figure>
+</div>
+
+<h2 id="q5">6. Landmark 조합 · 모델 비교</h2>
+<div class="take">조합 세트·전진 선택·MLP 모두 clinical 대비 외부 AUC 개선이 일관되지 않음. 개별 유의(DM Tier1 ratios@L3 +0.017, p=0.022, 보정 전)는 반대 방향에서 +0.010 [−0.002, +0.024]로 방향은 같지만 CI가 0을 포함.</div>
+<h3>조합 세트 외부 AUC (Gangnam 학습 → Sinchon)</h3>
+<div class="wrap"><table>
+<tr><th>Disease</th><th>Set</th><th>#Feat</th><th>CV AUC (G)</th><th>Ext AUC (S)</th><th>Δ vs clinical</th></tr>
+<tr><td>HTN</td><td>clinical</td><td>3</td><td>0.782</td><td>0.717</td><td>-</td></tr>
+<tr><td></td><td>VAT@L3</td><td>4</td><td>0.799</td><td>0.721</td><td>+0.004 (p=0.525)</td></tr>
+<tr><td></td><td>Tier1 ratios@all</td><td>36</td><td>0.791</td><td>0.727</td><td>+0.010 (p=0.216)</td></tr>
+<tr><td>DM</td><td>clinical</td><td>3</td><td>0.721</td><td>0.687</td><td>-</td></tr>
+<tr><td></td><td>VAT@L3</td><td>4</td><td>0.730</td><td>0.686</td><td>−0.001 (p=0.904)</td></tr>
+<tr><td></td><td>Tier1 ratios@L3</td><td>6</td><td>0.727</td><td>0.704</td><td class="pos">+0.017 (p=0.022)</td></tr>
+<tr><td>CKD</td><td>clinical</td><td>3</td><td>0.766</td><td>0.616</td><td>-</td></tr>
+<tr><td></td><td>VAT@L3</td><td>4</td><td>0.765</td><td>0.615</td><td>−0.001 (p=0.092)</td></tr>
+<tr><td></td><td>VAT,SAT,TAMA@all</td><td>38</td><td>0.769</td><td>0.642</td><td>+0.026 (p=0.074)</td></tr>
+</table></div>
+<h3>MLP vs 로지스틱</h3>
+<ul><li>전체 21개 세트 평균 외부 AUC 차이(MLP−LR) −0.001, 개별 차이 모두 |0.012| 이하. DM Tier1 ratios@L3(−0.012, p&lt;0.001)·HTN clinical(+0.004, p=0.014)·CKD Tier1(+0.006, p=0.045)은 통계적으로 달랐지만 크기가 작아 모델 복잡도의 실질 이득은 없음</li></ul>
+<h3>부분군 분석 (사전 지정)</h3>
+<ul><li>CKD S→G에서는 Tier1 ratios@L3 −0.034, VAT,SAT,TAMA@L3 −0.033으로 오히려 감소</li>
+<li>성별·나이/BMI 3분위·성별×분위, 매칭 그룹 162개 중 두 방향 모두 CI가 0을 제외하고 부호가 같은 그룹은 <b>0개</b></li>
+<li>두 방향 ΔAUC 부호 일치 59%, 상관 0.12 → 큰 ΔAUC 그룹은 재현되지 않음</li></ul>
+<h3>전체 feature 풀 전진 선택 (1,226개)</h3>
+<ul><li>학습 코호트 CV로 최대 6개 선택, 다른 코호트 외부 평가 → 6개 중 clinical 대비 유의는 CKD S→G 1건뿐(그마저 AUC 감소 0.761→0.713). 최적 landmark 조합 탐색에서도 CKD S→G 값 조합은 0.761→0.702(p=0.01)로 악화</li></ul>
+
+<h2 id="lit">7. 선행연구와의 비교</h2>
+<div class="wrap"><table>
+<tr><th>Study</th><th>핵심 결과</th><th>본 연구와의 관계</th></tr>
+<tr><td style="text-align:left">Framingham (n=3,001)</td><td style="text-align:left">VAT가 SAT보다 HTN·DM·MetS와 강한 연관, 여성에서 더 강함</td><td>VAT &gt; SAT: 일치. '여성에서 더 강함'은 HTN Gangnam(남 1.93 &gt; 여 1.40)과 달라 불일치</td></tr>
+<tr><td style="text-align:left">Jackson Heart (n=2,477)</td><td style="text-align:left">VAT 1SD당 OR 여성 HTN 1.62, DM 1.82</td><td>보정 OR HTN 1.3~1.8: 크기 유사</td></tr>
+<tr><td style="text-align:left">Sci Rep 2026 한국 (n=14,105)</td><td style="text-align:left">VAT↑ 시 CKD 위험↑, 여성 SAT는 역상관</td><td>CKD VAT 방향 일치, 보정 후 비유의</td></tr>
+<tr><td style="text-align:left">JCSM 2026 메타분석 (CKD)</td><td style="text-align:left">CKD에서 당뇨는 근감소 위험↑, 높은 BMI는 보호</td><td>TAMA는 매우 약함 (일부 구간 비율에서만 소수 위치): 간접 비교</td></tr>
+<tr><td style="text-align:left">AEC</td><td style="text-align:left">질환 지표로 다룬 연구 못 찾음</td><td>탐색적, 체격·장비 교란 주의</td></tr>
+</table></div>
+
+<h2 id="next">8. 결론 · 다음 단계</h2>
+<div class="card"><h3 style="margin-top:0">결론</h3><ul>
+<li>VAT가 질환과 가장 뚜렷하며 보정 후 HTN에서만 두 코호트 일관.</li>
+<li>DM은 Gangnam에서만, CKD는 둘 다 비유의 → BMI 교란 또는 표본 수 한계. 병원 간 불일치가 커 통계적 유의성이 곧 임상적 유용성은 아님.</li>
+<li>AEC는 patient-wise 곡선(PC1)에서 HTN·DM 신호가 장비 보정 후에도 유지되지만 AUC 개선은 작음. CKD는 장비 보정 후 Gangnam에서 소실, 위치별 FDR 신호도 사라짐.</li>
+<li>SAT·TAMA·AEC 단면 값 단독은 약함. 일관된 신호는 SAT 조직 비율(VAT 비중이라 독립 정보 아님)과 AEC 구간 비율 위주이고, TAMA는 DM 5/65, CKD 1/65, 조직 비율 1/156으로 매우 약함.</li>
+</ul></div>
+<div class="card"><h3 style="margin-top:0">한계</h3><ul>
+<li>단면 코호트(longitudinal 아님), 튜닝·평가 fold 공유, CKD 양성 수 적음</li>
+<li>스캐너·촬영 조건이 AEC와 얽힘(ComBat 등 보정은 radiomics 대상 문헌)</li>
+<li>AEC를 질환 지표로 해석하는 문헌 근거 없음 → 탐색적</li></ul></div>
+
+<h2 id="files">자료 위치</h2>
+<div class="wrap"><table>
+<tr><th>자료</th><th>경로</th></tr>
+<tr><td>최신 덱 (질환 차이)</td><td style="text-align:left">docs/261006_landmark_disease_difference.pptx</td></tr>
+<tr><td>Landmark AUC 덱</td><td style="text-align:left">docs/261003_landmark_VAT_AUC.pptx</td></tr>
+<tr><td>세미나 덱</td><td style="text-align:left">docs/261002_연구세미나발표자료.pptx</td></tr>
+<tr><td>논문 초안·구조</td><td style="text-align:left">docs/현재_논문/</td></tr>
+<tr><td>결과 엑셀·그림</td><td style="text-align:left">outputs/clinic4/ (landmark/, figures/)</td></tr>
+<tr><td>분석 코드</td><td style="text-align:left">code/core · analysis · landmark · figures</td></tr>
+<tr><td>실시간 모델 실험 앱</td><td style="text-align:left">code/app.py (<code>streamlit run code/app.py</code>)</td></tr>
+</table></div>
+<p class="cap">이 페이지는 code/research.html이며 수치는 pptx 덱에서 옮긴 값입니다. 코호트 N은 덱마다 다릅니다(261002: 1,260/1,123, 이후: 1,436/1,129). 덱이 갱신되면 이 페이지도 수정이 필요합니다.</p>
+</main>
+</body>
+</html>
