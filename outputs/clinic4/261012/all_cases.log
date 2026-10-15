@@ -1,0 +1,141 @@
+[gangnam] QC 제외(landmark 순서 이상): 7명
+[gangnam] landmark 환자 1443 -> 곡선/라벨 보유 1436명 (HTN=170, DM=77, CKD=13)
+[sinchon] QC 제외(landmark 순서 이상): 16명
+[sinchon] landmark 환자 1145 -> 곡선/라벨 보유 1129명 (HTN=179, DM=98, CKD=19)
+done point/baseline
+done point/Model1
+done sets/baseline
+done sets/Model1
+done regions/baseline
+done ratio/baseline
+done fpca/baseline
+done sex
+done forward
+
+=== 두 코호트 재현(p<0.05 양쪽, ΔAUC>0 양쪽) ===
+     tag family disease        block  coef_per_SD_gangnam  coef_per_SD_sinchon  delta_auc_gangnam  delta_auc_sinchon  p_fdr_gangnam  p_fdr_sinchon  p_median_gangnam  p_median_sinchon  ext_auc_baseline  ext_auc_block  ext_delta  ext_frac_up
+baseline   fpca      DM  FPCA(body3)               -0.156               -0.203              0.026              0.009          0.013          0.071             0.010             0.016             0.697          0.690     -0.007         0.38
+baseline  ratio     HTN     VAT/TAMA                0.522                0.332              0.017              0.003          0.043          0.158             0.002             0.027             0.702          0.706      0.004         0.89
+baseline   sets     HTN VAT|L1,L3,L5                0.161               -0.249              0.016              0.004          0.035          0.302             0.009             0.047             0.702          0.695     -0.007         0.08
+
+=== FDR<0.05 (코호트x질환 family) ===
+ cohort disease  family      tag              block  delta_auc  p_median  p_fdr  ext_delta
+gangnam     HTN   point baseline      VAT@L1_center      0.015     0.005  0.036      0.006
+gangnam     HTN   point baseline      VAT@L2_center      0.017     0.004  0.034     -0.001
+gangnam     HTN   point baseline      VAT@L3_center      0.019     0.002  0.034     -0.006
+gangnam     HTN   point baseline      VAT@L4_center      0.016     0.004  0.034     -0.003
+gangnam     HTN   point baseline      VAT@L5_center      0.014     0.004  0.034     -0.011
+gangnam     HTN   point baseline      VAT@S1_center      0.018     0.002  0.034     -0.010
+gangnam     HTN   point baseline     SAT@liver_dome      0.007     0.011  0.046     -0.003
+gangnam     HTN   point baseline     SAT@T11_center      0.005     0.012  0.046     -0.005
+gangnam     HTN   point baseline     SAT@T12_center      0.005     0.010  0.046     -0.004
+gangnam     HTN   point baseline      SAT@L1_center      0.006     0.006  0.036     -0.007
+gangnam     HTN   point baseline      SAT@L2_center      0.009     0.004  0.034     -0.013
+gangnam     HTN   point baseline      SAT@L3_center      0.007     0.011  0.046     -0.013
+gangnam     HTN    sets baseline         VAT+SAT|L3      0.019     0.001  0.016     -0.014
+gangnam     HTN    sets baseline       bodycomp3|L3      0.017     0.002  0.016     -0.011
+gangnam     HTN    sets baseline            all4|L3      0.014     0.004  0.023     -0.012
+gangnam     HTN    sets baseline       VAT|L1,L3,L5      0.016     0.009  0.035     -0.007
+gangnam     HTN    sets baseline       SAT|L1,L3,L5      0.003     0.023  0.049     -0.011
+gangnam     HTN    sets baseline   VAT+SAT|L1,L3,L5      0.010     0.011  0.035     -0.014
+gangnam     HTN    sets baseline bodycomp3|L1,L3,L5      0.008     0.012  0.035     -0.016
+gangnam     HTN    sets baseline      all4|L1,L3,L5      0.006     0.015  0.036     -0.021
+gangnam      DM    sets baseline    bodycomp3|all12      0.017     0.005  0.039     -0.021
+gangnam      DM    sets baseline         all4|all12      0.013     0.001  0.012     -0.015
+gangnam      DM    sets   Model1         all4|all12      0.005     0.001  0.022     -0.010
+gangnam     HTN regions baseline            VAT low      0.017     0.002  0.027     -0.007
+gangnam     HTN regions baseline             SAT up      0.006     0.011  0.043     -0.004
+gangnam     HTN regions baseline         VAT low+up      0.015     0.005  0.028     -0.005
+gangnam      DM regions baseline         AEC low+up      0.031     0.004  0.046      0.025
+gangnam     HTN   ratio baseline           VAT/TAMA      0.017     0.002  0.043      0.004
+gangnam     HTN    fpca baseline          FPCA(VAT)      0.016     0.006  0.022     -0.003
+gangnam     HTN    fpca baseline          FPCA(SAT)      0.004     0.020  0.030     -0.006
+gangnam     HTN    fpca baseline      FPCA(VAT,SAT)      0.011     0.006  0.022     -0.005
+gangnam     HTN    fpca baseline        FPCA(body3)      0.006     0.017  0.030     -0.003
+gangnam     HTN    fpca baseline         FPCA(all4)      0.002     0.021  0.030     -0.012
+gangnam      DM    fpca baseline          FPCA(SAT)      0.034     0.004  0.010      0.012
+gangnam      DM    fpca baseline          FPCA(AEC)      0.031     0.005  0.010      0.016
+gangnam      DM    fpca baseline      FPCA(VAT,SAT)      0.032     0.004  0.010     -0.012
+gangnam      DM    fpca baseline        FPCA(body3)      0.026     0.010  0.013     -0.007
+gangnam      DM    fpca baseline         FPCA(all4)      0.030     0.006  0.010     -0.006
+
+=== 전진 선택 ===
+disease  n_draw  ext_auc_baseline  ext_auc_selected  ext_delta  ext_frac_up  mean_n_selected
+    HTN      30             0.701             0.691     -0.010        0.133            1.833
+     DM      30             0.698             0.696     -0.003        0.400            2.967
+    CKD      30             0.579             0.569     -0.010        0.533            2.767
+disease                      feature  selected_in_draws  n_draw
+    HTN   SAT@femoral_head_center/L3                  9      30
+    HTN                VAT@S1_center                  7      30
+    HTN                VAT@L3_center                  7      30
+    HTN               SAT@liver_dome                  3      30
+    HTN          TAMA/(TAMA+VAT+SAT)                  3      30
+    HTN             AEC@L1_center/L3                  3      30
+    HTN                     VAT/TAMA                  3      30
+    HTN                VAT@L2_center                  2      30
+    HTN               TAMA@L5_center                  2      30
+    HTN      VAT@femoral_head_center                  2      30
+     DM   AEC@femoral_head_center/L3                 13      30
+     DM             SAT@L1_center/L3                  7      30
+     DM    AEC@inferior_pubic_margin                  6      30
+     DM                      VAT/SAT                  5      30
+     DM              TAMA@T10_center                  4      30
+     DM VATfrac_liver_dome~L1_center                  4      30
+     DM                SAT@L4_center                  4      30
+     DM      SAT@femoral_head_center                  3      30
+     DM            TAMA@L5_center/L3                  3      30
+     DM    SAT@inferior_pubic_margin                  3      30
+    CKD            VAT/SAT@L5_center                  9      30
+    CKD               AEC@liver_dome                  6      30
+    CKD             AEC@L1_center/L3                  5      30
+    CKD               VAT@liver_dome                  5      30
+    CKD                VAT@S1_center                  5      30
+    CKD            TAMA@L1_center/L3                  5      30
+    CKD            TAMA@L5_center/L3                  4      30
+    CKD             SAT@L5_center/L3                  4      30
+    CKD              TAMA@T11_center                  3      30
+    CKD                VAT@L2_center                  2      30
+
+=== MLP ===
+ cohort disease            block  delta_auc  p_median
+gangnam     HTN          all4|L3      0.013     0.003
+gangnam     HTN     bodycomp3|L3      0.013     0.001
+gangnam     HTN           AEC|L3     -0.006     0.380
+gangnam     HTN    all4|L1,L3,L5     -0.000     0.022
+gangnam     HTN AEC+bodycomp sum      0.018     0.007
+gangnam     HTN       FPCA(all4)     -0.021     0.042
+gangnam      DM          all4|L3      0.012     0.188
+gangnam      DM     bodycomp3|L3      0.019     0.149
+gangnam      DM           AEC|L3     -0.006     0.701
+gangnam      DM    all4|L1,L3,L5      0.011     0.051
+gangnam      DM AEC+bodycomp sum      0.013     0.091
+gangnam      DM       FPCA(all4)      0.035     0.005
+gangnam     CKD          all4|L3      0.005     0.128
+gangnam     CKD     bodycomp3|L3     -0.004     0.200
+gangnam     CKD           AEC|L3     -0.005     0.247
+gangnam     CKD    all4|L1,L3,L5     -0.005       NaN
+gangnam     CKD AEC+bodycomp sum      0.015     0.101
+gangnam     CKD       FPCA(all4)     -0.012       NaN
+sinchon     HTN          all4|L3     -0.008     0.189
+sinchon     HTN     bodycomp3|L3      0.009     0.141
+sinchon     HTN           AEC|L3     -0.014     0.680
+sinchon     HTN    all4|L1,L3,L5     -0.013     0.082
+sinchon     HTN AEC+bodycomp sum     -0.017     0.277
+sinchon     HTN       FPCA(all4)     -0.044     0.132
+sinchon      DM          all4|L3     -0.017     0.175
+sinchon      DM     bodycomp3|L3      0.002     0.143
+sinchon      DM           AEC|L3     -0.014     0.664
+sinchon      DM    all4|L1,L3,L5     -0.027     0.152
+sinchon      DM AEC+bodycomp sum     -0.014     0.605
+sinchon      DM       FPCA(all4)      0.006     0.043
+sinchon     CKD          all4|L3     -0.009     0.133
+sinchon     CKD     bodycomp3|L3     -0.060     0.359
+sinchon     CKD           AEC|L3      0.026     0.050
+sinchon     CKD    all4|L1,L3,L5      0.033     0.015
+sinchon     CKD AEC+bodycomp sum      0.043     0.044
+sinchon     CKD       FPCA(all4)      0.037     0.111
+
+=== 성별 층화 FDR<0.05 ===
+Empty DataFrame
+Columns: [tag, cohort, disease, block, delta_auc, p_median, p_fdr]
+Index: []
